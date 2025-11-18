@@ -11,6 +11,7 @@ class BenefitTrackerApp {
         this.cards = [];
         this.today = new Date();
         this.expiringDays = 30;
+        this.pollInterval = 800; // Default poll interval
 
         // -- References --
         this.loadingIndicator = document.getElementById('loading-indicator');
@@ -34,6 +35,7 @@ class BenefitTrackerApp {
         this.settingsCancelBtn = document.getElementById('settings-cancel');
         this.settingsLocalBtn = document.getElementById('use-local-storage-btn');
         this.s3UrlInput = document.getElementById('s3-url-input');
+        this.pollIntervalInput = document.getElementById('poll-interval-input'); // NEW reference
         this.currentStorageLabel = document.getElementById('current-storage-type');
 
         // Expiring Soon
@@ -64,6 +66,12 @@ class BenefitTrackerApp {
         this.today.setHours(0, 0, 0, 0);
         this.expiringDays = parseInt(this.expiringDaysSelect.value, 10);
 
+        // Load Poll Interval Config
+        const storedInterval = localStorage.getItem('creditCardBenefitTracker_pollInterval');
+        if (storedInterval) {
+            this.pollInterval = parseInt(storedInterval, 10);
+        }
+
         // 1. Determine Storage Provider
         const cloudConfig = localStorage.getItem('creditCardBenefitTracker_config');
         if (cloudConfig) {
@@ -81,23 +89,66 @@ class BenefitTrackerApp {
             this.cards = await this.storage.loadData();
         } catch (e) {
             console.error("Init Load Error", e);
-            // In case of cloud failure, we don't fall back automatically to prevent data desync,
-            // but in a real app we might notify the user.
-            if (this.storage instanceof CloudStore) {
-                alert("Failed to load data from Cloud. Please check settings.");
-            }
+            alert("Failed to load data. Please check your settings or network connection.");
         } finally {
             this.toggleLoading(false);
         }
 
-        // 3. Check for resets
+        // 3. Start Live Tracking
+        this.initLiveSync();
+
+        // 4. Check for resets
         const pendingResets = this.checkAndResetBenefits();
 
-        // 4. Handle resets if any, else render
+        // 5. Handle resets if any, else render
         if (pendingResets.length > 0) {
             this.showResetModal(pendingResets);
         } else {
             this.render();
+        }
+    }
+
+    /**
+     * Sets up live synchronization mechanisms.
+     */
+    initLiveSync() {
+        // Mechanism 1: LocalStorage Event (Instant sync across tabs)
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'creditCardBenefitTracker') {
+                console.log('Local change detected in another tab.');
+                this.checkForUpdates();
+            }
+        });
+
+        // Mechanism 2: Cloud Polling (Sync across devices)
+        if (this.storage instanceof CloudStore) {
+            console.log(`Starting cloud polling every ${this.pollInterval}ms`);
+            setInterval(() => {
+                this.checkForUpdates();
+            }, this.pollInterval);
+        }
+    }
+
+    /**
+     * checks storage for updates and refreshes UI if data has changed.
+     * Runs silently (no alerts on failure).
+     */
+    async checkForUpdates() {
+        // Safety: Don't update if the user is currently typing in a field.
+        if (document.activeElement && document.activeElement.tagName === 'INPUT') {
+            return;
+        }
+
+        try {
+            const remoteData = await this.storage.loadData();
+
+            if (JSON.stringify(this.cards) !== JSON.stringify(remoteData)) {
+                console.log('New data detected, updating UI...');
+                this.cards = remoteData;
+                this.render();
+            }
+        } catch (e) {
+            console.warn('Background sync failed:', e.message);
         }
     }
 
@@ -120,9 +171,7 @@ class BenefitTrackerApp {
             await this.storage.saveData(this.cards);
         } catch (e) {
             console.error("Save Error", e);
-            if (this.storage instanceof CloudStore) {
-                alert("Failed to save changes to Cloud. Please check network connection.");
-            }
+            alert(`Failed to save changes.\n${e.message}`);
         } finally {
             this.toggleLoading(false);
         }
@@ -131,11 +180,16 @@ class BenefitTrackerApp {
     // --- Settings / Storage Logic ---
 
     openSettings() {
+        // Pre-fill current values
+        this.pollIntervalInput.value = this.pollInterval;
         this.settingsModal.style.display = 'flex';
     }
 
     async handleConnectCloud() {
         const url = this.s3UrlInput.value.trim();
+        // Default to 800 if empty or invalid
+        const interval = parseInt(this.pollIntervalInput.value) || 800;
+
         if (!url) return;
 
         // Create a temporary store to test connection
@@ -151,10 +205,11 @@ class BenefitTrackerApp {
             // Try to fetch data.
             await tempStore.loadData();
 
-            // If success: Save config
+            // If success: Save config and interval
             localStorage.setItem('creditCardBenefitTracker_config', url);
+            localStorage.setItem('creditCardBenefitTracker_pollInterval', interval);
 
-            // alert('Connection successful! Switching to Cloud storage.');
+            alert(`Connection successful! Switching to Cloud storage (Poll: ${interval}ms).`);
             location.reload(); // Reload to re-init with new storage
         } catch (e) {
             alert(`Could not connect to that URL.\n${e.message}`);
@@ -168,6 +223,8 @@ class BenefitTrackerApp {
     handleSwitchToLocal() {
         if (confirm('Switch back to Local Storage? Your Cloud URL will be forgotten.')) {
             localStorage.removeItem('creditCardBenefitTracker_config');
+            // Note: We usually keep the poll interval setting, or we could clear it too.
+            // keeping it is harmless.
             location.reload();
         }
     }

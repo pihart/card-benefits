@@ -11,26 +11,28 @@ class CloudStore extends StorageInterface {
 
     async loadData() {
         try {
-            const response = await fetch(this.url, {
+            // timestamp prevents caching on some aggressive browsers/proxies
+            const fetchUrl = `${this.url}${this.url.includes('?') ? '&' : '?'}t=${new Date().getTime()}`;
+
+            const response = await fetch(fetchUrl, {
                 method: 'GET',
-                cache: 'no-cache' // Ensure we get fresh data
+                cache: 'no-store'
             });
 
             if (response.status === 404) {
-                // File doesn't exist yet, treat as empty
+                // File doesn't exist yet on the cloud, return empty array
                 return [];
             }
 
             if (!response.ok) {
-                throw new Error(`Failed to load data: ${response.statusText}`);
+                throw new Error(`Failed to load data: ${response.status} ${response.statusText}`);
             }
 
             const data = await response.json();
             return Array.isArray(data) ? data : [];
         } catch (error) {
-            console.error('Cloud Load Error:', error);
-            alert('Error loading data from Cloud Storage. Check console for details.');
-            return [];
+            // We throw the error so the app can decide to alert (user action) or log (background poll)
+            throw new Error(`Cloud Load Error: ${error.message}`);
         }
     }
 
@@ -45,11 +47,10 @@ class CloudStore extends StorageInterface {
             });
 
             if (!response.ok) {
-                throw new Error(`Failed to save data: ${response.statusText}`);
+                throw new Error(`Failed to save data: ${response.status} ${response.statusText}`);
             }
         } catch (error) {
-            console.error('Cloud Save Error:', error);
-            alert('Error saving data to Cloud Storage. Check console for details.');
+            throw new Error(`Cloud Save Error: ${error.message}`);
         }
     }
 }
