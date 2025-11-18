@@ -26,15 +26,29 @@
     font-size: 1.1rem;
 }
 
+/* Badge for Auto-Claimed benefits */
 .auto-claim-badge {
     font-size: 0.75rem;
-    background-color: #e2e6ea;
-    color: var(--dark-gray);
+    background-color: #d4edda; /* Light green */
+    color: #155724;
     padding: 2px 6px;
     border-radius: 4px;
     margin-left: 8px;
     vertical-align: middle;
-    border: 1px solid #ccc;
+    border: 1px solid #c3e6cb;
+    font-weight: normal;
+}
+
+/* Badge for Ignored benefits */
+.ignored-badge {
+    font-size: 0.75rem;
+    background-color: #f8d7da; /* Light red */
+    color: #721c24;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 8px;
+    vertical-align: middle;
+    border: 1px solid #f5c6cb;
     font-weight: normal;
 }
 
@@ -67,6 +81,11 @@
     transition: max-height 0.3s ease-out, opacity 0.2s 0.1s, visibility 0.3s;
 }
 
+/* UPDATED: Removed .benefit-ignored selectors here.
+   Only .benefit-used triggers the collapse.
+   Since ignored items get the .benefit-used class added in JS,
+   they start collapsed but can be toggled open.
+*/
 .benefit-item.benefit-used .meta,
 .benefit-item.benefit-used .next-reset,
 .benefit-item.benefit-used .benefit-controls,

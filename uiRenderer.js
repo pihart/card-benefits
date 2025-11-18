@@ -6,14 +6,15 @@ class UIRenderer {
         this.app = app; // Reference to the main controller
     }
 
-    renderExpiringSoon(expiringItems, days) {
+    renderExpiringSoon(activeItems, ignoredItems, days) {
         const container = document.getElementById('expiring-soon-container');
         const list = document.getElementById('expiring-soon-list');
 
         container.style.display = 'block';
         list.innerHTML = '';
 
-        if (expiringItems.length === 0) {
+        // 1. Render Active Items
+        if (activeItems.length === 0 && ignoredItems.length === 0) {
             const li = document.createElement('li');
             li.className = 'expiring-item-empty';
             li.textContent = `No unused benefits are expiring within ${days} days.`;
@@ -21,7 +22,8 @@ class UIRenderer {
             return;
         }
 
-        expiringItems.forEach(item => {
+        // Helper to create items
+        const createItem = (item) => {
             const li = document.createElement('li');
             li.className = 'expiring-item';
             li.innerHTML = `
@@ -32,8 +34,46 @@ class UIRenderer {
                 </div>
                 <span class="expiring-item-date">Resets: ${item.nextResetDate.toLocaleDateString()}</span>
             `;
-            list.appendChild(li);
-        });
+            return li;
+        };
+
+        activeItems.forEach(item => list.appendChild(createItem(item)));
+
+        // 2. Render Ignored Subsection (if any)
+        if (ignoredItems.length > 0) {
+            const details = document.createElement('details');
+            details.className = 'ignored-section';
+
+            const summary = document.createElement('summary');
+            summary.textContent = `Ignored Items (${ignoredItems.length})`;
+            details.appendChild(summary);
+
+            const ignoredList = document.createElement('ul');
+            ignoredList.className = 'expiring-list'; // Reuse style
+            ignoredList.style.marginTop = '0';
+
+            ignoredItems.forEach(item => ignoredList.appendChild(createItem(item)));
+
+            details.appendChild(ignoredList);
+            // Append subsection to main list container
+            // Note: We append 'details' directly to 'list' parent or keep it separate?
+            // Let's append to 'list' but wrap in li or just append to container?
+            // Ideally append to container so it's separate from the UL.
+
+            // Actually, the UL is for list items. Let's close UL and append details to container.
+            // But 'renderExpiringSoon' only controls 'list'.
+            // Let's append the details *after* the list in the container.
+
+            // CLEAR previous subsection if exists
+            const oldDetails = container.querySelector('.ignored-section');
+            if (oldDetails) oldDetails.remove();
+
+            container.appendChild(details);
+        } else {
+            // Cleanup if no ignored items
+            const oldDetails = container.querySelector('.ignored-section');
+            if (oldDetails) oldDetails.remove();
+        }
     }
 
     createCardElement(card, allBenefitsUsed) {
@@ -129,12 +169,16 @@ class UIRenderer {
         const remaining = benefit.totalAmount - benefit.usedAmount;
         const progressPercent = (benefit.totalAmount > 0) ? (benefit.usedAmount / benefit.totalAmount) * 100 : 0;
         const isUsed = remaining <= 0;
-        if (isUsed) li.classList.add('benefit-used');
 
-        // --- NEW: Check for active auto-claim ---
-        const isAutoClaimed = benefit.autoClaim === true &&
-            benefit.autoClaimEndDate &&
-            new Date(benefit.autoClaimEndDate) >= this.app.today;
+        // --- Check for Active Statuses ---
+        const isAutoClaimed = this.app.isAutoClaimActive(benefit);
+        const isIgnored = this.app.isIgnoredActive(benefit);
+
+        // Apply collapse class if used OR ignored
+        if (isUsed || isIgnored) li.classList.add('benefit-used'); // Reusing 'benefit-used' style for collapse
+
+        // Apply specific ignored class for styling if needed (optional)
+        if (isIgnored) li.classList.add('benefit-ignored');
 
         // Details
         const detailsDiv = document.createElement('div');
@@ -142,9 +186,11 @@ class UIRenderer {
         detailsDiv.style.cursor = 'pointer';
 
         let titleHtml = `<span class="description">${benefit.description}</span>`;
-        // Append badge if active
         if (isAutoClaimed) {
             titleHtml += `<span class="auto-claim-badge">🔄 Auto-Claim</span>`;
+        }
+        if (isIgnored) {
+            titleHtml += `<span class="ignored-badge">🚫 Ignored</span>`;
         }
 
         detailsDiv.innerHTML = `
@@ -238,12 +284,24 @@ class UIRenderer {
             this.app.handleUpdateBenefitUsage(benefit.id, nextVal);
         };
 
-        decBtn.onclick = (e) => { e.stopPropagation(); handleSmartIncrement('down'); };
-        incBtn.onclick = (e) => { e.stopPropagation(); handleSmartIncrement('up'); };
+        decBtn.onclick = (e) => {
+            e.stopPropagation();
+            handleSmartIncrement('down');
+        };
+        incBtn.onclick = (e) => {
+            e.stopPropagation();
+            handleSmartIncrement('up');
+        };
 
-        updateInput.onfocus = (e) => { e.target.select(); };
-        updateInput.onblur = (e) => { if (e.target.value === '') e.target.value = benefit.usedAmount.toFixed(2); };
-        updateInput.onchange = (e) => { this.app.handleUpdateBenefitUsage(benefit.id, parseFloat(e.target.value)); };
+        updateInput.onfocus = (e) => {
+            e.target.select();
+        };
+        updateInput.onblur = (e) => {
+            if (e.target.value === '') e.target.value = benefit.usedAmount.toFixed(2);
+        };
+        updateInput.onchange = (e) => {
+            this.app.handleUpdateBenefitUsage(benefit.id, parseFloat(e.target.value));
+        };
 
         inputWrapper.appendChild(decBtn);
         inputWrapper.appendChild(updateInput);
@@ -321,11 +379,22 @@ class UIRenderer {
             <div class="form-row" id="auto-claim-row-${uId}" style="display:none; border-top:1px dashed #ccc; padding-top:10px;">
                 <div class="form-group" style="flex-direction:row; align-items:center; gap:10px; flex:0;">
                     <input type="checkbox" name="autoClaim" id="ac-check-${uId}" style="width:auto;">
-                    <label for="ac-check-${uId}" style="margin:0;">Auto-Claim?</label>
+                    <label for="ac-check-${uId}" style="margin:0; white-space:nowrap;">Auto-Claim?</label>
                 </div>
                 <div class="form-group" id="ac-date-group-${uId}" style="display:none;">
                     <label style="margin-bottom:2px;">Until Date</label>
                     <input type="date" name="autoClaimEndDate">
+                </div>
+            </div>
+
+            <div class="form-row" id="ignore-row-${uId}" style="display:none; border-top:1px dashed #ccc; padding-top:10px;">
+                <div class="form-group" style="flex-direction:row; align-items:center; gap:10px; flex:0;">
+                    <input type="checkbox" name="ignored" id="ig-check-${uId}" style="width:auto;">
+                    <label for="ig-check-${uId}" style="margin:0; white-space:nowrap;">Ignore?</label>
+                </div>
+                <div class="form-group" id="ig-date-group-${uId}" style="display:none;">
+                    <label style="margin-bottom:2px;">Until Date</label>
+                    <input type="date" name="ignoredEndDate">
                 </div>
             </div>
 
@@ -340,23 +409,44 @@ class UIRenderer {
         const acCheck = form.querySelector(`#ac-check-${uId}`);
         const acDateGroup = form.querySelector(`#ac-date-group-${uId}`);
 
+        const igRow = form.querySelector(`#ignore-row-${uId}`);
+        const igCheck = form.querySelector(`#ig-check-${uId}`);
+        const igDateGroup = form.querySelector(`#ig-date-group-${uId}`);
+
         freqSelect.onchange = (e) => {
             const isOneTime = e.target.value === 'one-time';
             if (isOneTime) {
                 resetGroup.style.display = 'none';
                 resetSelect.required = false;
-                acRow.style.display = 'none'; // Hide auto-claim for one-time
+                acRow.style.display = 'none';
+                igRow.style.display = 'none';
             } else {
                 resetGroup.style.display = 'block';
                 resetSelect.required = true;
-                acRow.style.display = 'flex'; // Show auto-claim for recurring
+                acRow.style.display = 'flex';
+                igRow.style.display = 'flex';
             }
         };
 
+        // Mutual Exclusivity Logic
         acCheck.onchange = (e) => {
             acDateGroup.style.display = e.target.checked ? 'flex' : 'none';
-            const dateInput = acDateGroup.querySelector('input');
-            dateInput.required = e.target.checked;
+            acDateGroup.querySelector('input').required = e.target.checked;
+            if (e.target.checked) {
+                igCheck.checked = false;
+                igDateGroup.style.display = 'none';
+                igDateGroup.querySelector('input').required = false;
+            }
+        };
+
+        igCheck.onchange = (e) => {
+            igDateGroup.style.display = e.target.checked ? 'flex' : 'none';
+            igDateGroup.querySelector('input').required = e.target.checked;
+            if (e.target.checked) {
+                acCheck.checked = false;
+                acDateGroup.style.display = 'none';
+                acDateGroup.querySelector('input').required = false;
+            }
         };
 
         form.onsubmit = (e) => {
@@ -367,15 +457,19 @@ class UIRenderer {
                 totalAmount: parseFloat(formData.get('totalAmount')),
                 frequency: formData.get('frequency'),
                 resetType: formData.get('frequency') === 'one-time' ? null : formData.get('resetType'),
-                // Capture new fields
                 autoClaim: formData.get('autoClaim') === 'on',
-                autoClaimEndDate: formData.get('autoClaimEndDate') || null
+                autoClaimEndDate: formData.get('autoClaimEndDate') || null,
+                ignored: formData.get('ignored') === 'on',
+                ignoredEndDate: formData.get('ignoredEndDate') || null
             };
             this.app.handleAddBenefit(cardId, benefitData);
             e.target.reset();
+            // UI Reset
             resetGroup.style.display = 'none';
             acRow.style.display = 'none';
             acDateGroup.style.display = 'none';
+            igRow.style.display = 'none';
+            igDateGroup.style.display = 'none';
             form.style.display = 'none';
             form.previousElementSibling.style.display = 'block';
         };
@@ -414,9 +508,13 @@ class UIRenderer {
         document.getElementById(`save-${uId}`).onclick = () => {
             const newName = document.getElementById(`name-${uId}`).value.trim();
             const newDate = document.getElementById(`date-${uId}`).value;
-            if (newName && newDate) { this.app.handleUpdateCard(card.id, newName, newDate); }
+            if (newName && newDate) {
+                this.app.handleUpdateCard(card.id, newName, newDate);
+            }
         };
-        document.getElementById(`cancel-${uId}`).onclick = () => { this.app.render(); };
+        document.getElementById(`cancel-${uId}`).onclick = () => {
+            this.app.render();
+        };
     }
 
     renderBenefitEdit(benefit, card) {
@@ -430,6 +528,7 @@ class UIRenderer {
 
         const isRecurring = benefit.frequency !== 'one-time';
         const hasAutoClaim = benefit.autoClaim === true;
+        const hasIgnored = benefit.ignored === true;
 
         form.innerHTML = `
             <h3 style="margin: 0; font-size: 1.1rem;">Editing: ${benefit.description}</h3>
@@ -477,6 +576,17 @@ class UIRenderer {
                 </div>
             </div>
 
+            <div class="form-row" id="ignore-row-${uId}" style="display:${isRecurring ? 'flex' : 'none'}; border-top:1px dashed #ccc; padding-top:10px;">
+                <div class="form-group" style="flex-direction:row; align-items:center; gap:10px; flex:0;">
+                    <input type="checkbox" id="ig-check-${uId}" style="width:auto;" ${hasIgnored ? 'checked' : ''}>
+                    <label for="ig-check-${uId}" style="margin:0;">Ignore?</label>
+                </div>
+                <div class="form-group" id="ig-date-group-${uId}" style="display:${hasIgnored ? 'flex' : 'none'};">
+                    <label style="margin-bottom:2px;">Until Date</label>
+                    <input type="date" id="ig-date-${uId}" value="${benefit.ignoredEndDate || ''}" ${hasIgnored ? 'required' : ''}>
+                </div>
+            </div>
+
             <div class="form-row" style="justify-content: flex-end;">
                 <button class="secondary-btn" id="cancel-${uId}">Cancel</button>
                 <button id="save-${uId}">Save Changes</button>
@@ -489,24 +599,49 @@ class UIRenderer {
         const freqSelect = document.getElementById(`freq-${uId}`);
         const resetGroup = document.getElementById(`reset-group-${uId}`);
         const resetSelect = document.getElementById(`reset-${uId}`);
+
         const acRow = document.getElementById(`auto-claim-row-${uId}`);
         const acCheck = document.getElementById(`ac-check-${uId}`);
         const acDateGroup = document.getElementById(`ac-date-group-${uId}`);
         const acDateInput = document.getElementById(`ac-date-${uId}`);
 
+        const igRow = document.getElementById(`ignore-row-${uId}`);
+        const igCheck = document.getElementById(`ig-check-${uId}`);
+        const igDateGroup = document.getElementById(`ig-date-group-${uId}`);
+        const igDateInput = document.getElementById(`ig-date-${uId}`);
+
         freqSelect.onchange = (e) => {
             if (e.target.value === 'one-time') {
-                resetGroup.style.display = 'none'; resetSelect.required = false;
+                resetGroup.style.display = 'none';
+                resetSelect.required = false;
                 acRow.style.display = 'none';
+                igRow.style.display = 'none';
             } else {
-                resetGroup.style.display = 'block'; resetSelect.required = true;
+                resetGroup.style.display = 'block';
+                resetSelect.required = true;
                 acRow.style.display = 'flex';
+                igRow.style.display = 'flex';
             }
         };
 
         acCheck.onchange = (e) => {
             acDateGroup.style.display = e.target.checked ? 'flex' : 'none';
             acDateInput.required = e.target.checked;
+            if (e.target.checked) {
+                igCheck.checked = false;
+                igDateGroup.style.display = 'none';
+                igDateInput.required = false;
+            }
+        };
+
+        igCheck.onchange = (e) => {
+            igDateGroup.style.display = e.target.checked ? 'flex' : 'none';
+            igDateInput.required = e.target.checked;
+            if (e.target.checked) {
+                acCheck.checked = false;
+                acDateGroup.style.display = 'none';
+                acDateInput.required = false;
+            }
         };
 
         document.getElementById(`save-${uId}`).onclick = () => {
@@ -515,13 +650,20 @@ class UIRenderer {
                 totalAmount: parseFloat(document.getElementById(`amt-${uId}`).value),
                 frequency: freqSelect.value,
                 resetType: null,
-                // Capture Auto Claim updates
                 autoClaim: acCheck.checked,
-                autoClaimEndDate: acCheck.checked ? acDateInput.value : null
+                autoClaimEndDate: acCheck.checked ? acDateInput.value : null,
+                ignored: igCheck.checked,
+                ignoredEndDate: igCheck.checked ? igDateInput.value : null
             };
-            if (newData.frequency !== 'one-time') { newData.resetType = resetSelect.value; }
-            if (newData.description && newData.totalAmount) { this.app.handleUpdateBenefit(benefit.id, newData); }
+            if (newData.frequency !== 'one-time') {
+                newData.resetType = resetSelect.value;
+            }
+            if (newData.description && newData.totalAmount) {
+                this.app.handleUpdateBenefit(benefit.id, newData);
+            }
         };
-        document.getElementById(`cancel-${uId}`).onclick = () => { this.app.render(); };
+        document.getElementById(`cancel-${uId}`).onclick = () => {
+            this.app.render();
+        };
     }
 }

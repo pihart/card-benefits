@@ -137,7 +137,7 @@ class BenefitTrackerApp {
     }
 
     /**
-     * Helper to determine if Auto-Claim is currently valid for a benefit
+     * Helper to determine if Auto-Claim is currently valid
      */
     isAutoClaimActive(benefit) {
         if (benefit.frequency === 'one-time') return false;
@@ -145,10 +145,20 @@ class BenefitTrackerApp {
         if (!benefit.autoClaimEndDate) return false;
 
         const endDate = new Date(benefit.autoClaimEndDate);
-        // Set time to midnight to compare dates properly
         endDate.setHours(0, 0, 0, 0);
+        return endDate >= this.today;
+    }
 
-        // Active if today is before or on the end date
+    /**
+     * NEW: Helper to determine if Ignore is currently valid
+     */
+    isIgnoredActive(benefit) {
+        if (benefit.frequency === 'one-time') return false;
+        if (benefit.ignored !== true) return false;
+        if (!benefit.ignoredEndDate) return false;
+
+        const endDate = new Date(benefit.ignoredEndDate);
+        endDate.setHours(0, 0, 0, 0);
         return endDate >= this.today;
     }
 
@@ -160,24 +170,28 @@ class BenefitTrackerApp {
             card.benefits.forEach(benefit => {
                 if (benefit.frequency === 'one-time') return;
 
-                // 1. Enforce Auto-Claim on CURRENT period
-                // If auto-claim is on, and it's not fully used, fill it up immediately.
+                // 1. Enforce Auto-Claim immediately
                 if (this.isAutoClaimActive(benefit) && benefit.usedAmount < benefit.totalAmount) {
                     benefit.usedAmount = benefit.totalAmount;
                     stateChanged = true;
                 }
 
-                // 2. Check for Resets (New Period)
+                // 2. Check for Resets
                 const nextReset = DateUtils.calculateNextResetDate(benefit, card, this.today);
 
                 if (nextReset <= this.today) {
                     if (this.isAutoClaimActive(benefit)) {
-                        // Auto-reset logic: Reset date AND mark as used immediately
+                        // Auto-Claim reset: Mark used immediately
                         benefit.lastReset = this.today.toISOString();
                         benefit.usedAmount = benefit.totalAmount;
                         stateChanged = true;
+                    } else if (this.isIgnoredActive(benefit)) {
+                        // NEW: Ignored reset: Reset dates, reset amount to 0, do NOT prompt user
+                        benefit.lastReset = this.today.toISOString();
+                        benefit.usedAmount = 0;
+                        stateChanged = true;
                     } else {
-                        // Manual logic: Queue for modal
+                        // Manual reset
                         pendingManualResets.push({cardName: card.name, benefit: benefit});
                     }
                 }
@@ -213,32 +227,38 @@ class BenefitTrackerApp {
 
     // --- Rendering Proxy ---
     render() {
-        // Filter expiring items logic
-        const allExpiring = [];
+        // Separate expiring items into active and ignored
+        const expiringActive = [];
+        const expiringIgnored = [];
+
         const limitDate = new Date(this.today.getTime());
         limitDate.setDate(this.today.getDate() + this.expiringDays);
 
         this.cards.forEach(card => {
             card.benefits.forEach(benefit => {
                 const rem = benefit.totalAmount - benefit.usedAmount;
-                // Skip if fully used (unless it's about to reset, but logic here checks 'rem')
                 if (rem <= 0 || benefit.frequency === 'one-time') return;
 
                 const next = DateUtils.calculateNextResetDate(benefit, card, this.today);
+
                 if (next > this.today && next <= limitDate) {
-                    allExpiring.push({
-                        cardName: card.name,
-                        benefit: benefit,
-                        remainingAmount: rem,
-                        nextResetDate: next
-                    });
+                    const item = {cardName: card.name, benefit: benefit, remainingAmount: rem, nextResetDate: next};
+
+                    if (this.isIgnoredActive(benefit)) {
+                        expiringIgnored.push(item);
+                    } else {
+                        expiringActive.push(item);
+                    }
                 }
             });
         });
-        allExpiring.sort((a, b) => b.remainingAmount - a.remainingAmount);
 
-        // Delegate to UI Renderer
-        this.ui.renderExpiringSoon(allExpiring, this.expiringDays);
+        // Sort both lists
+        const sortFn = (a, b) => b.remainingAmount - a.remainingAmount;
+        expiringActive.sort(sortFn);
+        expiringIgnored.sort(sortFn);
+
+        this.ui.renderExpiringSoon(expiringActive, expiringIgnored, this.expiringDays);
 
         this.cardListContainer.innerHTML = '';
         if (this.cards.length === 0) this.cardListContainer.innerHTML = '<p>No cards added yet.</p>';
@@ -292,6 +312,12 @@ class BenefitTrackerApp {
             if (this.isAutoClaimActive(newBenefit)) {
                 newBenefit.usedAmount = newBenefit.totalAmount;
             }
+            // Enforce Mutual Exclusivity (UI should handle, but data layer check is good)
+            if (newBenefit.autoClaim && newBenefit.ignored) {
+                // Prefer auto-claim or throw error. Let's prioritize auto-claim and disable ignore.
+                newBenefit.ignored = false;
+                newBenefit.ignoredEndDate = null;
+            }
 
             card.benefits.push(newBenefit);
             this.saveState();
@@ -342,11 +368,17 @@ class BenefitTrackerApp {
             if (b) {
                 Object.assign(b, data);
 
+                // Enforce Mutual Exclusivity in Data
+                if (b.autoClaim && b.ignored) {
+                    // If updated to both (shouldn't happen via UI), prioritize AutoClaim
+                    b.ignored = false;
+                    b.ignoredEndDate = null;
+                }
+
                 // Enforce AC immediately on update
                 if (this.isAutoClaimActive(b)) {
                     b.usedAmount = b.totalAmount;
                 } else if (b.usedAmount > b.totalAmount) {
-                    // Standard bounds check if not auto-claimed
                     b.usedAmount = b.totalAmount;
                 }
 
