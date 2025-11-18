@@ -1,6 +1,7 @@
 /**
- * S3-Compatible Object Storage Implementation.
- * Uses simple GET and PUT requests to a pre-signed URL.
+ * Cloud Object Storage Implementation.
+ * Uses simple GET and PUT requests to a pre-authenticated URL.
+ * Works with OCI PARs, AWS S3 Presigned URLs, Azure SAS, etc.
  */
 class CloudStore extends StorageInterface {
     constructor(url) {
@@ -27,8 +28,8 @@ class CloudStore extends StorageInterface {
             const data = await response.json();
             return Array.isArray(data) ? data : [];
         } catch (error) {
-            console.error('S3 Load Error:', error);
-            alert('Error loading data from S3. Check console for details.');
+            console.error('Cloud Load Error:', error);
+            alert('Error loading data from Cloud Storage. Check console for details.');
             return [];
         }
     }
@@ -47,8 +48,8 @@ class CloudStore extends StorageInterface {
                 throw new Error(`Failed to save data: ${response.statusText}`);
             }
         } catch (error) {
-            console.error('S3 Save Error:', error);
-            alert('Error saving data to S3. Check console for details.');
+            console.error('Cloud Save Error:', error);
+            alert('Error saving data to Cloud Storage. Check console for details.');
         }
     }
 }
