@@ -6,13 +6,12 @@ class UIRenderer {
         this.app = app; // Reference to the main controller
     }
 
+    // ... (renderExpiringSoon and createCardElement remain unchanged) ...
     renderExpiringSoon(expiringItems, days) {
         const container = document.getElementById('expiring-soon-container');
         const list = document.getElementById('expiring-soon-list');
-
         container.style.display = 'block';
         list.innerHTML = '';
-
         if (expiringItems.length === 0) {
             const li = document.createElement('li');
             li.className = 'expiring-item-empty';
@@ -20,7 +19,6 @@ class UIRenderer {
             list.appendChild(li);
             return;
         }
-
         expiringItems.forEach(item => {
             const li = document.createElement('li');
             li.className = 'expiring-item';
@@ -66,12 +64,10 @@ class UIRenderer {
         // Actions
         const cardActions = document.createElement('div');
         cardActions.className = 'card-header-actions';
-
         const editBtn = document.createElement('button');
         editBtn.className = 'secondary-btn';
         editBtn.textContent = 'Edit';
         editBtn.onclick = () => this.renderCardEdit(card);
-
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'danger-btn';
         deleteBtn.textContent = 'Delete';
@@ -84,7 +80,6 @@ class UIRenderer {
         // Body
         const cardBody = document.createElement('div');
         cardBody.className = 'card-body';
-
         const benefitList = document.createElement('ul');
         benefitList.className = 'benefit-list';
         if (card.benefits.length > 0) {
@@ -101,15 +96,12 @@ class UIRenderer {
         const showBtn = document.createElement('button');
         showBtn.className = 'secondary-btn show-add-benefit-btn';
         showBtn.textContent = 'Add New Benefit';
-
         const form = this.createAddBenefitForm(card.id);
         form.style.display = 'none';
-
         showBtn.onclick = () => {
             showBtn.style.display = 'none';
             form.style.display = 'flex';
         };
-
         addBenefitContainer.appendChild(showBtn);
         addBenefitContainer.appendChild(form);
 
@@ -117,10 +109,12 @@ class UIRenderer {
         cardBody.appendChild(addBenefitContainer);
         cardDiv.appendChild(cardHeader);
         cardDiv.appendChild(cardBody);
-
         return cardDiv;
     }
 
+    /**
+     * UPDATED: Now includes Smart Increment Logic
+     */
     createBenefitElement(benefit, card) {
         const li = document.createElement('li');
         li.className = 'benefit-item';
@@ -143,6 +137,8 @@ class UIRenderer {
         `;
         detailsDiv.onclick = (e) => {
             if (e.target.closest('.edit-form')) return;
+            if (e.target.closest('.smart-stepper-btn')) return; // Don't toggle on button click
+            if (e.target.tagName === 'INPUT') return; // Don't toggle on input click
             li.classList.toggle('benefit-used');
         };
 
@@ -162,38 +158,106 @@ class UIRenderer {
         const nextResetDiv = document.createElement('div');
         nextResetDiv.className = 'next-reset';
         if (benefit.frequency !== 'one-time') {
-            // Call the static utility
             const nextResetDate = DateUtils.calculateNextResetDate(benefit, card, this.app.today);
             nextResetDiv.textContent = `Resets on: ${nextResetDate.toLocaleDateString()}`;
         } else {
             nextResetDiv.textContent = `One-time benefit`;
         }
 
-        // Controls
+        // --- Controls ---
         const controlsDiv = document.createElement('div');
         controlsDiv.className = 'benefit-controls';
 
         const updateLabel = document.createElement('label');
         updateLabel.textContent = 'Set used: $';
+
+        // --- NEW: Smart Input Wrapper ---
+        const inputWrapper = document.createElement('div');
+        inputWrapper.className = 'smart-input-wrapper';
+
+        // Decrease Button
+        const decBtn = document.createElement('button');
+        decBtn.className = 'smart-stepper-btn';
+        decBtn.textContent = '−'; // Minus sign
+        decBtn.tabIndex = -1; // Skip tab stop
+
+        // Input Field
         const updateInput = document.createElement('input');
         updateInput.type = 'number';
         updateInput.value = benefit.usedAmount.toFixed(2);
         updateInput.min = "0";
         updateInput.max = benefit.totalAmount;
-        updateInput.step = "0.01";
+        updateInput.step = "0.01"; // Keep 0.01 to allow precise manual typing
 
-        updateInput.onfocus = (e) => {
-            // Highlight text so typing overwrites it, but spinners still work
-            e.target.select();
+        // Increase Button
+        const incBtn = document.createElement('button');
+        incBtn.className = 'smart-stepper-btn';
+        incBtn.textContent = '+';
+        incBtn.tabIndex = -1;
+
+        // --- SMART LOGIC ---
+        const getSmartStep = () => {
+            if (benefit.totalAmount >= 200) return 5;
+            if (benefit.totalAmount >= 10) return 1;
+            return 0.01;
         };
 
+        // Snap logic: rounds current value to nearest step, then moves up/down
+        const handleSmartIncrement = (direction) => {
+            const step = getSmartStep();
+            let current = parseFloat(updateInput.value) || 0;
+            let nextVal;
+
+            if (direction === 'up') {
+                // Floor divides by step to find "grid slot", adds 1 to move to next slot
+                // e.g., 10.25 (step 1) -> floor(10.25) = 10 -> 10 + 1 = 11.00
+                nextVal = (Math.floor(current / step) + 1) * step;
+            } else {
+                // Ceil ensures 10.25 (step 1) -> ceil(10.25) = 11 -> 11 - 1 = 10.00
+                // Check if exact match to avoid staying on same number due to float precision
+                if (current % step === 0) {
+                    nextVal = current - step;
+                } else {
+                    nextVal = Math.ceil(current / step) * step - step;
+                }
+            }
+
+            // Bounds checking
+            if (nextVal < 0) nextVal = 0;
+            if (nextVal > benefit.totalAmount) nextVal = benefit.totalAmount;
+
+            // Fix float precision issues (e.g. 10.00000001)
+            nextVal = parseFloat(nextVal.toFixed(2));
+
+            updateInput.value = nextVal.toFixed(2);
+            // Trigger update
+            this.app.handleUpdateBenefitUsage(benefit.id, nextVal);
+        };
+
+        decBtn.onclick = (e) => {
+            e.stopPropagation();
+            handleSmartIncrement('down');
+        };
+        incBtn.onclick = (e) => {
+            e.stopPropagation();
+            handleSmartIncrement('up');
+        };
+
+        // Input Event Listeners
+        updateInput.onfocus = (e) => {
+            e.target.select();
+        }; // Highlight for easy typing
         updateInput.onblur = (e) => {
             if (e.target.value === '') e.target.value = benefit.usedAmount.toFixed(2);
         };
-
         updateInput.onchange = (e) => {
             this.app.handleUpdateBenefitUsage(benefit.id, parseFloat(e.target.value));
         };
+
+        // Assemble Wrapper
+        inputWrapper.appendChild(decBtn);
+        inputWrapper.appendChild(updateInput);
+        inputWrapper.appendChild(incBtn);
 
         const rightControls = document.createElement('div');
         rightControls.className = 'controls-right';
@@ -201,7 +265,6 @@ class UIRenderer {
         editBtn.className = 'secondary-btn';
         editBtn.textContent = 'Edit';
         editBtn.onclick = () => this.renderBenefitEdit(benefit, card);
-
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'danger-btn';
         deleteBtn.textContent = 'Delete';
@@ -209,8 +272,9 @@ class UIRenderer {
 
         rightControls.appendChild(editBtn);
         rightControls.appendChild(deleteBtn);
+
         controlsDiv.appendChild(updateLabel);
-        controlsDiv.appendChild(updateInput);
+        controlsDiv.appendChild(inputWrapper); // Add wrapper instead of raw input
         controlsDiv.appendChild(rightControls);
 
         li.appendChild(detailsDiv);
@@ -222,6 +286,7 @@ class UIRenderer {
         return li;
     }
 
+    // ... (createAddBenefitForm, renderCardEdit, renderBenefitEdit remain unchanged) ...
     createAddBenefitForm(cardId) {
         const form = document.createElement('form');
         form.className = 'benefit-form';
@@ -289,11 +354,10 @@ class UIRenderer {
                 resetType: formData.get('frequency') === 'one-time' ? null : formData.get('resetType'),
             };
             this.app.handleAddBenefit(cardId, benefitData);
-            // Reset UI state
             e.target.reset();
             resetGroup.style.display = 'none';
             form.style.display = 'none';
-            form.previousElementSibling.style.display = 'block'; // Show the "Add" button again
+            form.previousElementSibling.style.display = 'block';
         };
         return form;
     }
@@ -301,7 +365,6 @@ class UIRenderer {
     renderCardEdit(card) {
         const cardEl = document.querySelector(`.card[data-card-id="${card.id}"]`);
         if (!cardEl) return;
-
         const form = document.createElement('div');
         form.className = 'edit-form';
         const uId = Math.random().toString(36).substr(2, 9);
@@ -323,10 +386,8 @@ class UIRenderer {
                 <button id="save-${uId}">Save Changes</button>
             </div>
         `;
-
         cardEl.innerHTML = '';
         cardEl.appendChild(form);
-
         document.getElementById(`save-${uId}`).onclick = () => {
             const newName = document.getElementById(`name-${uId}`).value.trim();
             const newDate = document.getElementById(`date-${uId}`).value;
@@ -342,12 +403,10 @@ class UIRenderer {
     renderBenefitEdit(benefit, card) {
         const benefitEl = document.querySelector(`.benefit-item[data-benefit-id="${benefit.id}"]`);
         if (!benefitEl) return;
-
         const form = document.createElement('div');
         form.className = 'edit-form';
         form.style.marginBottom = '0';
         const uId = Math.random().toString(36).substr(2, 9);
-
         form.innerHTML = `
             <h3 style="margin: 0; font-size: 1.1rem;">Editing: ${benefit.description}</h3>
             <div class="form-row">
@@ -387,14 +446,11 @@ class UIRenderer {
                 <button id="save-${uId}">Save Changes</button>
             </div>
         `;
-
         benefitEl.innerHTML = '';
         benefitEl.appendChild(form);
-
         const freqSelect = document.getElementById(`freq-${uId}`);
         const resetGroup = document.getElementById(`reset-group-${uId}`);
         const resetSelect = document.getElementById(`reset-${uId}`);
-
         freqSelect.onchange = (e) => {
             if (e.target.value === 'one-time') {
                 resetGroup.style.display = 'none';
@@ -404,7 +460,6 @@ class UIRenderer {
                 resetSelect.required = true;
             }
         };
-
         document.getElementById(`save-${uId}`).onclick = () => {
             const newData = {
                 description: document.getElementById(`desc-${uId}`).value.trim(),

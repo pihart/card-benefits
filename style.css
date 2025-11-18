@@ -543,3 +543,72 @@ button.secondary-btn:hover {
         transform: translateY(0);
     }
 }
+
+/* --- Smart Input Controls --- */
+
+/* Hide native browser spinners */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+input[type=number] {
+    -moz-appearance: textfield; /* Firefox */
+}
+
+/* Wrapper to hold Button - Input - Button */
+.smart-input-wrapper {
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--medium-gray);
+    border-radius: 4px;
+    overflow: hidden; /* Ensures buttons stay inside rounded corners */
+    background-color: var(--white);
+}
+
+/* The Input itself */
+.smart-input-wrapper input[type="number"] {
+    border: none;
+    text-align: center;
+    width: 80px; /* Fixed width for consistency */
+    padding: 8px 5px;
+    border-radius: 0; /* Remove radius to fit in wrapper */
+    font-weight: bold;
+    color: var(--dark-gray);
+}
+
+/* The Buttons */
+.smart-stepper-btn {
+    background-color: var(--light-gray);
+    border: none;
+    border-left: 1px solid var(--medium-gray);
+    border-right: 1px solid var(--medium-gray);
+    color: var(--dark-gray);
+    font-weight: bold;
+    cursor: pointer;
+    width: 30px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    transition: background-color 0.2s;
+}
+
+/* Remove borders for outer edges */
+.smart-stepper-btn:first-child {
+    border-left: none;
+}
+
+.smart-stepper-btn:last-child {
+    border-right: none;
+}
+
+.smart-stepper-btn:hover {
+    background-color: #e2e6ea;
+}
+
+.smart-stepper-btn:active {
+    background-color: #dae0e5;
+}
