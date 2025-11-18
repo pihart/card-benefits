@@ -13,6 +13,7 @@
     --warning-text: #856404;
     --border-radius: 8px;
     --box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    --header-height: 80px; /* Approximate height for sticky calc */
 }
 
 body {
@@ -23,12 +24,17 @@ body {
     line-height: 1.6;
 }
 
-/* Header Flexbox Update */
+/* --- Header & Spinner --- */
 header {
     background-color: var(--white);
-    padding: 20px 40px;
+    padding: 15px 40px;
     border-bottom: 1px solid var(--medium-gray);
     box-shadow: var(--box-shadow);
+
+    /* NEW: Sticky Positioning */
+    position: sticky;
+    top: 0;
+    z-index: 1000; /* Ensure it sits above everything else */
 }
 
 .header-content {
@@ -42,6 +48,23 @@ header {
 h1 {
     color: #333;
     margin: 0;
+    font-size: 1.5rem;
+}
+
+/* Loading Spinner */
+.spinner {
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(0, 123, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: var(--primary-color);
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 h2 {
@@ -70,7 +93,8 @@ h2 {
         grid-column: 2;
         grid-row: 1;
         position: sticky;
-        top: 20px;
+        /* Offset to account for the sticky header so they don't overlap */
+        top: calc(var(--header-height) + 20px);
         height: fit-content;
     }
 

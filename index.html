@@ -10,11 +10,13 @@
 
 <header>
     <div class="header-content">
-        <div>
+        <div style="display: flex; align-items: center; gap: 15px;">
             <h1>💳 Benefit Tracker</h1>
-            <p>Track your card benefits and make sure nothing goes to waste.</p>
+            <div id="loading-indicator" class="spinner" style="display: none;"></div>
         </div>
-        <button id="settings-btn" class="secondary-btn">⚙️ Settings</button>
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <button id="settings-btn" class="secondary-btn">⚙️ Settings</button>
+        </div>
     </div>
 </header>
 
@@ -81,12 +83,15 @@
         <div id="settings-modal" class="modal-overlay">
             <div class="modal-content">
                 <h2>Data Storage Settings</h2>
-                <p>Configure where your data is saved. <br><small>Current: <b id="current-storage-type">Local Storage</b></small></p>
+                <p>Configure where your data is saved. <br><small>Current: <b id="current-storage-type">Local
+                    Storage</b></small></p>
 
                 <div class="form-group">
-                    <label for="s3-url-input">S3-Compatible Object URL (JSON)</label>
-                    <input type="text" id="s3-url-input" placeholder="https://bucket.s3.region.amazonaws.com/data.json?presigned-tokens...">
-                    <small style="color: #666;">Provide a pre-signed URL that allows both GET and PUT methods.</small>
+                    <label for="s3-url-input">Object Storage URL (JSON)</label>
+                    <input type="text" id="s3-url-input"
+                           placeholder="https://objectstorage.us-ashburn-1.oraclecloud.com/p/TOKEN/n/NAMESPACE/b/BUCKET/o/data.json">
+                    <small style="color: #666;">Provide a pre-authenticated URL (PAR) that allows read/write
+                        access.</small>
                 </div>
 
                 <div class="modal-actions" style="justify-content: space-between;">
@@ -105,7 +110,7 @@
 
 <script src="storageInterface.js"></script>
 <script src="localStorageStore.js"></script>
-<script src="s3Store.js"></script>
+<script src="cloudStore.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

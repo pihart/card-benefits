@@ -13,6 +13,7 @@ class BenefitTrackerApp {
         this.expiringDays = 30;
 
         // -- References --
+        this.loadingIndicator = document.getElementById('loading-indicator');
         this.cardListContainer = document.getElementById('card-list-container');
         this.addCardFormContainer = document.querySelector('.card-form-container');
         this.addCardForm = document.getElementById('add-card-form');
@@ -52,7 +53,7 @@ class BenefitTrackerApp {
         // Settings Modal Listeners
         this.settingsBtn.addEventListener('click', () => this.openSettings());
         this.settingsCancelBtn.addEventListener('click', () => this.settingsModal.style.display = 'none');
-        this.settingsSaveBtn.addEventListener('click', this.handleConnectS3.bind(this));
+        this.settingsSaveBtn.addEventListener('click', this.handleConnectCloud.bind(this));
         this.settingsLocalBtn.addEventListener('click', this.handleSwitchToLocal.bind(this));
     }
 
@@ -64,18 +65,30 @@ class BenefitTrackerApp {
         this.expiringDays = parseInt(this.expiringDaysSelect.value, 10);
 
         // 1. Determine Storage Provider
-        const s3Config = localStorage.getItem('creditCardBenefitTracker_config');
-        if (s3Config) {
-            this.storage = new S3Store(s3Config);
-            this.currentStorageLabel.textContent = 'S3 Object Storage';
-            this.s3UrlInput.value = s3Config;
+        const cloudConfig = localStorage.getItem('creditCardBenefitTracker_config');
+        if (cloudConfig) {
+            this.storage = new CloudStore(cloudConfig);
+            this.currentStorageLabel.textContent = 'Cloud Object Storage';
+            this.s3UrlInput.value = cloudConfig;
         } else {
             this.storage = new LocalStorageStore();
             this.currentStorageLabel.textContent = 'Local Storage';
         }
 
-        // 2. Load data
-        this.cards = await this.storage.loadData();
+        // 2. Load data with Loader
+        this.toggleLoading(true);
+        try {
+            this.cards = await this.storage.loadData();
+        } catch (e) {
+            console.error("Init Load Error", e);
+            // In case of cloud failure, we don't fall back automatically to prevent data desync,
+            // but in a real app we might notify the user.
+            if (this.storage instanceof CloudStore) {
+                alert("Failed to load data from Cloud. Please check settings.");
+            }
+        } finally {
+            this.toggleLoading(false);
+        }
 
         // 3. Check for resets
         const pendingResets = this.checkAndResetBenefits();
@@ -89,10 +102,30 @@ class BenefitTrackerApp {
     }
 
     /**
-     * Saves the current state to the storage layer.
+     * Toggles the visual loading indicator.
+     * @param {boolean} isLoading
+     */
+    toggleLoading(isLoading) {
+        if (this.loadingIndicator) {
+            this.loadingIndicator.style.display = isLoading ? 'block' : 'none';
+        }
+    }
+
+    /**
+     * Saves the current state to the storage layer with loading indicator.
      */
     async saveState() {
-        await this.storage.saveData(this.cards);
+        this.toggleLoading(true);
+        try {
+            await this.storage.saveData(this.cards);
+        } catch (e) {
+            console.error("Save Error", e);
+            if (this.storage instanceof CloudStore) {
+                alert("Failed to save changes to Cloud. Please check network connection.");
+            }
+        } finally {
+            this.toggleLoading(false);
+        }
     }
 
     // --- Settings / Storage Logic ---
@@ -101,38 +134,39 @@ class BenefitTrackerApp {
         this.settingsModal.style.display = 'flex';
     }
 
-    async handleConnectS3() {
+    async handleConnectCloud() {
         const url = this.s3UrlInput.value.trim();
         if (!url) return;
 
         // Create a temporary store to test connection
-        const tempStore = new S3Store(url);
+        const tempStore = new CloudStore(url);
 
         // Change button to loading state
         const originalText = this.settingsSaveBtn.textContent;
         this.settingsSaveBtn.textContent = 'Testing Connection...';
         this.settingsSaveBtn.disabled = true;
+        this.toggleLoading(true);
 
         try {
-            // Try to fetch data. If it's a 404, that's "success" (empty file).
-            // If network error or 403, it throws.
-            const data = await tempStore.loadData();
+            // Try to fetch data.
+            await tempStore.loadData();
 
             // If success: Save config
             localStorage.setItem('creditCardBenefitTracker_config', url);
 
-            alert('Connection successful! Switching to S3 storage.');
+            // alert('Connection successful! Switching to Cloud storage.');
             location.reload(); // Reload to re-init with new storage
         } catch (e) {
-            alert('Could not connect to that URL. Please check the URL and permissions.');
+            alert(`Could not connect to that URL.\n${e.message}`);
         } finally {
             this.settingsSaveBtn.textContent = originalText;
             this.settingsSaveBtn.disabled = false;
+            this.toggleLoading(false);
         }
     }
 
     handleSwitchToLocal() {
-        if (confirm('Switch back to Local Storage? Your S3 URL will be forgotten.')) {
+        if (confirm('Switch back to Local Storage? Your Cloud URL will be forgotten.')) {
             localStorage.removeItem('creditCardBenefitTracker_config');
             location.reload();
         }
@@ -140,42 +174,26 @@ class BenefitTrackerApp {
 
     // --- Benefit Reset Logic ---
 
-    /**
-     * Checks all benefits and returns a list of benefits that need to be reset.
-     */
     checkAndResetBenefits() {
         const pendingResets = [];
-
         this.cards.forEach(card => {
             card.benefits.forEach(benefit => {
                 if (benefit.frequency === 'one-time') return;
-
                 const nextResetDate = this.calculateNextResetDate(benefit, card);
-
-                // If the next reset date is on or before today, it needs a reset.
                 if (nextResetDate <= this.today) {
-                    pendingResets.push({cardName: card.name, benefit});
+                    pendingResets.push({cardName: card.name, benefit: benefit});
                 }
             });
         });
-
         return pendingResets;
     }
 
-    /**
-     * Calculates the *next* date a benefit is scheduled to reset.
-     * @param {Object} benefit - The benefit object (CONTAINS 'resetType')
-     * @param {Object} card - The card object (for anniversary)
-     * @returns {Date} The next reset date.
-     */
     calculateNextResetDate(benefit, card) {
         const lastReset = new Date(benefit.lastReset);
         lastReset.setHours(0, 0, 0, 0);
-
         const anniversary = new Date(card.anniversaryDate);
         anniversary.setMinutes(anniversary.getMinutes() + anniversary.getTimezoneOffset());
         anniversary.setHours(0, 0, 0, 0);
-
         let nextReset = new Date(lastReset.getTime());
 
         if (benefit.resetType === 'calendar') {
@@ -211,7 +229,6 @@ class BenefitTrackerApp {
             }
         } else {
             nextReset = new Date(lastReset.getFullYear(), lastReset.getMonth(), anniversary.getDate());
-
             switch (benefit.frequency) {
                 case 'monthly':
                     if (nextReset <= lastReset) {
@@ -241,7 +258,6 @@ class BenefitTrackerApp {
                     break;
             }
         }
-        
         while (nextReset <= this.today && nextReset <= lastReset) {
             const tempLastReset = new Date(nextReset.getTime());
             tempLastReset.setDate(tempLastReset.getDate() + 1);
@@ -274,7 +290,6 @@ class BenefitTrackerApp {
             reset.benefit.usedAmount = 0;
             reset.benefit.lastReset = this.today.toISOString();
         });
-
         await this.saveState();
         this.resetModal.style.display = 'none';
         this.render();
@@ -356,12 +371,6 @@ class BenefitTrackerApp {
         });
     }
 
-    /**
-     * Creates the DOM element for a single card.
-     * @param {Object} card
-     * @param {boolean} allBenefitsUsed - Flag to set initial collapse state
-     * @returns {HTMLElement}
-     */
     createCardElement(card, allBenefitsUsed) {
         const cardDiv = document.createElement('div');
         cardDiv.className = 'card';
@@ -529,7 +538,6 @@ class BenefitTrackerApp {
         li.appendChild(progressContainer);
         li.appendChild(nextResetDiv);
         li.appendChild(controlsDiv);
-
         return li;
     }
 

@@ -2,7 +2,7 @@
  * S3-Compatible Object Storage Implementation.
  * Uses simple GET and PUT requests to a pre-signed URL.
  */
-class S3Store extends StorageInterface {
+class CloudStore extends StorageInterface {
     constructor(url) {
         super();
         this.url = url;
