@@ -8,76 +8,104 @@
 </head>
 <body>
 
-    <header>
-        <h1>💳 Credit Card Benefit Tracker</h1>
-        <p>Track your card benefits and make sure nothing goes to waste.</p>
-    </header>
+<header>
+    <div class="header-content">
+        <div>
+            <h1>💳 Benefit Tracker</h1>
+            <p>Track your card benefits and make sure nothing goes to waste.</p>
+        </div>
+        <button id="settings-btn" class="secondary-btn">⚙️ Settings</button>
+    </div>
+</header>
 
-    <div class="page-layout">
+<div class="page-layout">
 
-        <aside class="sidebar-content">
-            <section id="expiring-soon-container" class="expiring-soon-container">
-                <div class="expiring-header">
-                    <h2>🔥 Expiring Soon</h2>
-                    <div class="form-group">
-                        <label for="expiring-days-select">Expires in:</label>
-                        <select id="expiring-days-select">
-                            <option value="7">7 Days</option>
-                            <option value="14">14 Days</option>
-                            <option value="30" selected>30 Days</option>
-                            <option value="60">60 Days</option>
-                        </select>
+    <aside class="sidebar-content">
+        <section id="expiring-soon-container" class="expiring-soon-container">
+            <div class="expiring-header">
+                <h2>🔥 Expiring Soon</h2>
+                <div class="form-group">
+                    <label for="expiring-days-select">Expires in:</label>
+                    <select id="expiring-days-select">
+                        <option value="7">7 Days</option>
+                        <option value="14">14 Days</option>
+                        <option value="30" selected>30 Days</option>
+                        <option value="60">60 Days</option>
+                    </select>
+                </div>
+            </div>
+            <ul id="expiring-soon-list" class="expiring-list">
+            </ul>
+        </section>
+    </aside>
+
+    <main>
+        <section id="card-list-container">
+        </section>
+
+        <section class="add-card-container">
+            <button id="show-add-card-btn" class="secondary-btn show-add-card-btn">Add a New Card</button>
+
+            <div class="card-form-container" style="display: none;">
+                <h2>Add a New Card</h2>
+                <form id="add-card-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="new-card-name">Card Name</label>
+                            <input type="text" id="new-card-name" placeholder="E.g., Amex Gold" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="new-card-anniversary">Anniversary Date</label>
+                            <input type="date" id="new-card-anniversary" required>
+                        </div>
                     </div>
-                </div>
-                <ul id="expiring-soon-list" class="expiring-list">
-                    </ul>
-            </section>
-        </aside>
+                    <div class="form-row">
+                        <button type="submit">Add Card</button>
+                    </div>
+                </form>
+            </div>
+        </section>
 
-        <main>
-            <section id="card-list-container">
-                </section>
-    
-            <section class="add-card-container">
-                <button id="show-add-card-btn" class="secondary-btn show-add-card-btn">Add a New Card</button>
-                
-                <div class="card-form-container" style="display: none;">
-                    <h2>Add a New Card</h2>
-                    <form id="add-card-form">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="new-card-name">Card Name</label>
-                                <input type="text" id="new-card-name" placeholder="E.g., Amex Gold" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="new-card-anniversary">Anniversary Date</label>
-                                <input type="date" id="new-card-anniversary" required>
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <button type="submit">Add Card</button>
-                        </div>
-                    </form>
+        <div id="reset-modal" class="modal-overlay">
+            <div class="modal-content">
+                <h2>Benefits Ready to Reset</h2>
+                <p>The following benefits have completed their cycle and are ready to be reset to $0 used:</p>
+                <ul id="modal-reset-list" class="modal-list"></ul>
+                <div class="modal-actions">
+                    <button id="modal-cancel" class="secondary-btn">Cancel</button>
+                    <button id="modal-ok">Reset Benefits</button>
                 </div>
-            </section>
-    
-            <div id="reset-modal" class="modal-overlay">
-                <div class="modal-content">
-                    <h2>Benefits Ready to Reset</h2>
-                    <p>The following benefits have completed their cycle and are ready to be reset to $0 used:</p>
-                    <ul id="modal-reset-list" class="modal-list">
-                        </ul>
-                    <div class="modal-actions">
-                        <button id="modal-cancel" class="secondary-btn">Cancel</button>
-                        <button id="modal-ok">Reset Benefits</button>
+            </div>
+        </div>
+
+        <div id="settings-modal" class="modal-overlay">
+            <div class="modal-content">
+                <h2>Data Storage Settings</h2>
+                <p>Configure where your data is saved. <br><small>Current: <b id="current-storage-type">Local Storage</b></small></p>
+
+                <div class="form-group">
+                    <label for="s3-url-input">S3-Compatible Object URL (JSON)</label>
+                    <input type="text" id="s3-url-input" placeholder="https://bucket.s3.region.amazonaws.com/data.json?presigned-tokens...">
+                    <small style="color: #666;">Provide a pre-signed URL that allows both GET and PUT methods.</small>
+                </div>
+
+                <div class="modal-actions" style="justify-content: space-between;">
+                    <button id="use-local-storage-btn" class="secondary-btn">Reset to Local Storage</button>
+                    <div style="display: flex; gap: 10px;">
+                        <button id="settings-cancel" class="secondary-btn">Cancel</button>
+                        <button id="settings-save">Save & Connect</button>
                     </div>
                 </div>
             </div>
-    
-        </main>
+        </div>
 
-    </div> <script src="storageInterface.js"></script>
-    <script src="localStorageStore.js"></script>
-    <script src="app.js"></script>
+    </main>
+
+</div>
+
+<script src="storageInterface.js"></script>
+<script src="localStorageStore.js"></script>
+<script src="s3Store.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

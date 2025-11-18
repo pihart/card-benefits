@@ -1,16 +1,16 @@
 /* General Setup */
 :root {
     --primary-color: #007bff;
-    --secondary-color: #6c757d; 
+    --secondary-color: #6c757d;
     --light-gray: #f8f9fa;
     --medium-gray: #dee2e6;
     --dark-gray: #495057;
     --white: #ffffff;
     --danger: #dc3545;
     --success: #28a745;
-    --warning-bg: #fff3cd; 
-    --warning-border: #ffeeba; 
-    --warning-text: #856404; 
+    --warning-bg: #fff3cd;
+    --warning-border: #ffeeba;
+    --warning-text: #856404;
     --border-radius: 8px;
     --box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
@@ -23,48 +23,20 @@ body {
     line-height: 1.6;
 }
 
-/* --- Page Layout Styles --- */
-.page-layout {
-    display: grid;
-    grid-template-columns: 1fr; /* Single column on mobile */
-    gap: 25px;
-    max-width: 1400px; /* Wider max-width for desktop layout */
-    margin: 20px auto;
-    padding: 0 20px;
-    box-sizing: border-box;
-}
-
-@media (min-width: 992px) {
-    .page-layout {
-        grid-template-columns: 1fr 380px; /* Two columns on desktop */
-    }
-    aside {
-        grid-column: 2; /* Sidebar is in second column */
-        grid-row: 1; /* Stay in the first row */
-        position: sticky;
-        top: 20px;
-        height: fit-content; /* Make sticky work */
-    }
-    main {
-        grid-column: 1; /* Main content is in first column */
-        grid-row: 1;
-    }
-}
-/* --- End Page Layout Styles --- */
-
-
-main {
-    max-width: 100%; /* Override old fixed width */
-    margin: 0; /* Override old margin */
-    padding: 0; /* Override old padding */
-}
-
+/* Header Flexbox Update */
 header {
     background-color: var(--white);
     padding: 20px 40px;
     border-bottom: 1px solid var(--medium-gray);
-    text-align: center;
     box-shadow: var(--box-shadow);
+}
+
+.header-content {
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 h1 {
@@ -78,9 +50,38 @@ h2 {
     margin-top: 1.5em;
 }
 
-/* --- Expiring Soon Styles --- */
+/* Page Layout */
+.page-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 25px;
+    max-width: 1400px;
+    margin: 20px auto;
+    padding: 0 20px;
+    box-sizing: border-box;
+}
+
+@media (min-width: 992px) {
+    .page-layout {
+        grid-template-columns: 1fr 380px;
+    }
+
+    aside {
+        grid-column: 2;
+        grid-row: 1;
+        position: sticky;
+        top: 20px;
+        height: fit-content;
+    }
+
+    main {
+        grid-column: 1;
+        grid-row: 1;
+    }
+}
+
+/* Expiring Soon */
 .expiring-soon-container {
-    margin: 0; /* Remove old margin */
     padding: 20px;
     background-color: var(--warning-bg);
     border: 1px solid var(--warning-border);
@@ -106,20 +107,21 @@ h2 {
     flex-direction: row;
     align-items: center;
     gap: 10px;
-    margin-bottom: 0; 
-    flex: 0 1 auto; 
+    margin-bottom: 0;
+    flex: 0 1 auto;
 }
+
 .expiring-header .form-group label {
     margin-bottom: 0;
     font-weight: normal;
     white-space: nowrap;
 }
+
 .expiring-header .form-group select {
     width: auto;
     font-size: 0.9rem;
     padding: 5px 8px;
 }
-
 
 .expiring-list {
     list-style: none;
@@ -138,7 +140,7 @@ h2 {
     background-color: #fff;
     border: 1px solid var(--medium-gray);
     margin-bottom: 10px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);
 }
 
 .expiring-item-empty {
@@ -179,10 +181,8 @@ h2 {
     border-radius: 4px;
     flex-shrink: 0;
 }
-/* --- End Expiring Soon Styles --- */
 
-
-/* --- Form Styles --- */
+/* Form Styles */
 .card-form-container,
 .benefit-form,
 .edit-form {
@@ -190,10 +190,9 @@ h2 {
     padding: 20px;
     border-radius: var(--border-radius);
     box-shadow: var(--box-shadow);
-    margin-bottom: 0; /* Updated */
+    margin-bottom: 0;
 }
 
-/* Base form styling */
 form,
 .edit-form {
     display: flex;
@@ -227,11 +226,8 @@ select {
     border: 1px solid var(--medium-gray);
     border-radius: 4px;
     font-size: 1rem;
-    box-sizing: border-box; 
+    box-sizing: border-box;
 }
-
-/* --- End Form Styles --- */
-
 
 button {
     padding: 10px 15px;
@@ -251,8 +247,9 @@ button:hover {
 
 button.danger-btn {
     background-color: var(--danger);
-    flex-shrink: 0; 
+    flex-shrink: 0;
 }
+
 button.danger-btn:hover {
     background-color: #a71d2a;
 }
@@ -260,12 +257,12 @@ button.danger-btn:hover {
 button.secondary-btn {
     background-color: var(--secondary-color);
 }
+
 button.secondary-btn:hover {
     background-color: #5a6268;
 }
 
-
-/* Card List */
+/* Card/Benefit List Styles */
 #card-list-container {
     display: grid;
     gap: 25px;
@@ -309,7 +306,6 @@ button.secondary-btn:hover {
     flex-shrink: 0;
 }
 
-
 .card-body {
     padding: 20px;
     transition: max-height 0.3s ease-out, padding 0.3s ease-out, visibility 0.3s;
@@ -324,8 +320,6 @@ button.secondary-btn:hover {
     visibility: hidden;
 }
 
-
-/* Benefit List */
 .benefit-list {
     list-style: none;
     padding: 0;
@@ -411,20 +405,18 @@ button.secondary-btn:hover {
     gap: 10px;
 }
 
-/* --- UPDATED: Benefit collapse styles --- */
-/* These items will be "open" by default */
+/* Benefit collapse styles */
 .benefit-item .meta,
 .benefit-item .next-reset,
 .benefit-item .benefit-controls,
 .benefit-item .edit-form {
-    max-height: 500px; /* Arbitrary large number for open state */
+    max-height: 500px;
     overflow: hidden;
     visibility: visible;
     opacity: 1;
     transition: max-height 0.3s ease-out, opacity 0.2s 0.1s, visibility 0.3s;
 }
 
-/* These items will be hidden when .benefit-used is applied */
 .benefit-item.benefit-used .meta,
 .benefit-item.benefit-used .next-reset,
 .benefit-item.benefit-used .benefit-controls,
@@ -434,8 +426,6 @@ button.secondary-btn:hover {
     visibility: hidden;
     transition: max-height 0.3s ease-out, opacity 0.2s, visibility 0.3s;
 }
-/* --- END UPDATE --- */
-
 
 /* Add Benefit Button styles */
 .add-benefit-container {
@@ -448,21 +438,19 @@ button.secondary-btn:hover {
     width: 100%;
 }
 
-/* --- Add Card Button styles --- */
+/* Add Card Button styles */
 .add-card-container {
     margin-top: 25px;
 }
 
 .show-add-card-btn {
     width: 100%;
-    padding: 15px; /* Make it a large button */
+    padding: 15px;
 }
-/* --- End Add Card Button styles --- */
 
-
-/* --- Modal Styles --- */
+/* Modal Styles */
 .modal-overlay {
-    display: none; /* Hidden by default */
+    display: none;
     position: fixed;
     z-index: 1000;
     left: 0;
@@ -470,8 +458,8 @@ button.secondary-btn:hover {
     width: 100%;
     height: 100%;
     overflow: auto;
-    background-color: rgba(0, 0, 0, 0.6); /* Dim background */
-    
+    background-color: rgba(0, 0, 0, 0.6);
+
     align-items: center;
     justify-content: center;
     padding: 20px;
@@ -509,6 +497,7 @@ button.secondary-btn:hover {
     padding: 10px 15px;
     border-bottom: 1px solid var(--medium-gray);
 }
+
 .modal-list li:last-child {
     border-bottom: none;
 }
@@ -520,7 +509,6 @@ button.secondary-btn:hover {
     margin-top: 25px;
 }
 
-/* Animation for modal */
 @keyframes fadeInModal {
     from {
         opacity: 0;
