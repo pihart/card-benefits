@@ -183,11 +183,14 @@ class UIRenderer {
         updateInput.step = "0.01";
 
         updateInput.onfocus = (e) => {
-            e.target.value = '';
+            // Highlight text so typing overwrites it, but spinners still work
+            e.target.select();
         };
+
         updateInput.onblur = (e) => {
             if (e.target.value === '') e.target.value = benefit.usedAmount.toFixed(2);
         };
+
         updateInput.onchange = (e) => {
             this.app.handleUpdateBenefitUsage(benefit.id, parseFloat(e.target.value));
         };
