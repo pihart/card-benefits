@@ -1,0 +1,67 @@
+/* --- Card List & Items --- */
+#card-list-container {
+    display: grid;
+    gap: 25px;
+}
+
+.card {
+    background-color: var(--white);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    overflow: hidden;
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: #343a40;
+    color: var(--white);
+    padding: 15px 20px;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.card-header-info {
+    flex-grow: 1;
+}
+
+.card-header-info h3 {
+    margin: 0;
+    font-size: 1.25rem;
+}
+
+.card-header-info .card-meta {
+    font-size: 0.85rem;
+    opacity: 0.8;
+}
+
+.card-header-actions {
+    display: flex;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.card-body {
+    padding: 20px;
+    transition: max-height 0.3s ease-out, padding 0.3s ease-out, visibility 0.3s;
+    overflow: hidden;
+    visibility: visible;
+}
+
+.card.card-collapsed .card-body {
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    visibility: hidden;
+}
+
+/* --- Add Card Container --- */
+.add-card-container {
+    margin-top: 25px;
+}
+
+.show-add-card-btn {
+    width: 100%;
+    padding: 15px;
+}

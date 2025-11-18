@@ -1,0 +1,176 @@
+/* --- Benefits List --- */
+.benefit-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.benefit-item {
+    border: 1px solid var(--medium-gray);
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 15px;
+    display: grid;
+    gap: 10px;
+}
+
+.benefit-item .details {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.benefit-item .description {
+    font-weight: bold;
+    font-size: 1.1rem;
+}
+
+.benefit-item .status {
+    font-weight: bold;
+    font-size: 1.1rem;
+}
+
+.benefit-item .meta {
+    font-size: 0.9rem;
+    color: #6c757d;
+    text-transform: capitalize;
+}
+
+.benefit-item .next-reset {
+    font-size: 0.85rem;
+    font-style: italic;
+    color: #333;
+}
+
+/* Collapse transitions */
+.benefit-item .meta,
+.benefit-item .next-reset,
+.benefit-item .benefit-controls,
+.benefit-item .edit-form {
+    max-height: 500px;
+    overflow: hidden;
+    visibility: visible;
+    opacity: 1;
+    transition: max-height 0.3s ease-out, opacity 0.2s 0.1s, visibility 0.3s;
+}
+
+.benefit-item.benefit-used .meta,
+.benefit-item.benefit-used .next-reset,
+.benefit-item.benefit-used .benefit-controls,
+.benefit-item.benefit-used .edit-form {
+    max-height: 0;
+    opacity: 0;
+    visibility: hidden;
+    transition: max-height 0.3s ease-out, opacity 0.2s, visibility 0.3s;
+}
+
+/* --- Progress Bar --- */
+.progress-bar {
+    width: 100%;
+    height: 10px;
+    background-color: var(--medium-gray);
+    border-radius: 5px;
+    overflow: hidden;
+    margin: 5px 0;
+}
+
+.progress-bar-inner {
+    height: 100%;
+    background-color: var(--success);
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+/* --- Smart Inputs (Controls) --- */
+.benefit-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.benefit-controls label {
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+.benefit-controls .controls-right {
+    margin-left: auto;
+    display: flex;
+    gap: 10px;
+}
+
+/* Hide native spinners */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+input[type=number] {
+    -moz-appearance: textfield;
+}
+
+.smart-input-wrapper {
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--medium-gray);
+    border-radius: 4px;
+    overflow: hidden;
+    background-color: var(--white);
+}
+
+.smart-input-wrapper input[type="number"] {
+    border: none;
+    text-align: center;
+    width: 80px;
+    padding: 8px 5px;
+    border-radius: 0;
+    font-weight: bold;
+    color: var(--dark-gray);
+}
+
+.smart-stepper-btn {
+    background-color: var(--light-gray);
+    border: none;
+    border-left: 1px solid var(--medium-gray);
+    border-right: 1px solid var(--medium-gray);
+    color: var(--dark-gray);
+    font-weight: bold;
+    cursor: pointer;
+    width: 30px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    transition: background-color 0.2s;
+}
+
+.smart-stepper-btn:first-child {
+    border-left: none;
+}
+
+.smart-stepper-btn:last-child {
+    border-right: none;
+}
+
+.smart-stepper-btn:hover {
+    background-color: #e2e6ea;
+}
+
+.smart-stepper-btn:active {
+    background-color: #dae0e5;
+}
+
+/* --- Add Benefit Button --- */
+.add-benefit-container {
+    border-top: 2px dashed var(--medium-gray);
+    padding-top: 20px;
+    margin-top: 20px;
+}
+
+.show-add-benefit-btn {
+    width: 100%;
+}
