@@ -136,16 +136,58 @@ class BenefitTrackerApp {
         }
     }
 
+    /**
+     * Helper to determine if Auto-Claim is currently valid for a benefit
+     */
+    isAutoClaimActive(benefit) {
+        if (benefit.frequency === 'one-time') return false;
+        if (benefit.autoClaim !== true) return false;
+        if (!benefit.autoClaimEndDate) return false;
+
+        const endDate = new Date(benefit.autoClaimEndDate);
+        // Set time to midnight to compare dates properly
+        endDate.setHours(0, 0, 0, 0);
+
+        // Active if today is before or on the end date
+        return endDate >= this.today;
+    }
+
     checkAndResetBenefits() {
-        const pending = [];
+        const pendingManualResets = [];
+        let stateChanged = false;
+
         this.cards.forEach(card => {
             card.benefits.forEach(benefit => {
                 if (benefit.frequency === 'one-time') return;
-                const next = DateUtils.calculateNextResetDate(benefit, card, this.today);
-                if (next <= this.today) pending.push({cardName: card.name, benefit: benefit});
+
+                // 1. Enforce Auto-Claim on CURRENT period
+                // If auto-claim is on, and it's not fully used, fill it up immediately.
+                if (this.isAutoClaimActive(benefit) && benefit.usedAmount < benefit.totalAmount) {
+                    benefit.usedAmount = benefit.totalAmount;
+                    stateChanged = true;
+                }
+
+                // 2. Check for Resets (New Period)
+                const nextReset = DateUtils.calculateNextResetDate(benefit, card, this.today);
+
+                if (nextReset <= this.today) {
+                    if (this.isAutoClaimActive(benefit)) {
+                        // Auto-reset logic: Reset date AND mark as used immediately
+                        benefit.lastReset = this.today.toISOString();
+                        benefit.usedAmount = benefit.totalAmount;
+                        stateChanged = true;
+                    } else {
+                        // Manual logic: Queue for modal
+                        pendingManualResets.push({cardName: card.name, benefit: benefit});
+                    }
+                }
             });
         });
-        return pending;
+
+        if (stateChanged) {
+            this.saveState();
+        }
+        return pendingManualResets;
     }
 
     showResetModal(pending) {
@@ -179,7 +221,9 @@ class BenefitTrackerApp {
         this.cards.forEach(card => {
             card.benefits.forEach(benefit => {
                 const rem = benefit.totalAmount - benefit.usedAmount;
+                // Skip if fully used (unless it's about to reset, but logic here checks 'rem')
                 if (rem <= 0 || benefit.frequency === 'one-time') return;
+
                 const next = DateUtils.calculateNextResetDate(benefit, card, this.today);
                 if (next > this.today && next <= limitDate) {
                     allExpiring.push({
@@ -237,12 +281,19 @@ class BenefitTrackerApp {
     handleAddBenefit(cardId, data) {
         const card = this.cards.find(c => c.id === cardId);
         if (card) {
-            card.benefits.push({
+            const newBenefit = {
                 id: `benefit-${Math.random().toString(36).substr(2, 9)}`,
                 ...data,
                 usedAmount: 0,
                 lastReset: this.today.toISOString()
-            });
+            };
+
+            // Enforce AC immediately on creation
+            if (this.isAutoClaimActive(newBenefit)) {
+                newBenefit.usedAmount = newBenefit.totalAmount;
+            }
+
+            card.benefits.push(newBenefit);
             this.saveState();
             this.render();
         }
@@ -290,7 +341,15 @@ class BenefitTrackerApp {
             const b = c.benefits.find(ben => ben.id === bId);
             if (b) {
                 Object.assign(b, data);
-                if (b.usedAmount > b.totalAmount) b.usedAmount = b.totalAmount;
+
+                // Enforce AC immediately on update
+                if (this.isAutoClaimActive(b)) {
+                    b.usedAmount = b.totalAmount;
+                } else if (b.usedAmount > b.totalAmount) {
+                    // Standard bounds check if not auto-claimed
+                    b.usedAmount = b.totalAmount;
+                }
+
                 this.saveState();
                 this.render();
                 return;

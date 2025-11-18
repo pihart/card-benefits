@@ -6,12 +6,13 @@ class UIRenderer {
         this.app = app; // Reference to the main controller
     }
 
-    // ... (renderExpiringSoon and createCardElement remain unchanged) ...
     renderExpiringSoon(expiringItems, days) {
         const container = document.getElementById('expiring-soon-container');
         const list = document.getElementById('expiring-soon-list');
+
         container.style.display = 'block';
         list.innerHTML = '';
+
         if (expiringItems.length === 0) {
             const li = document.createElement('li');
             li.className = 'expiring-item-empty';
@@ -19,6 +20,7 @@ class UIRenderer {
             list.appendChild(li);
             return;
         }
+
         expiringItems.forEach(item => {
             const li = document.createElement('li');
             li.className = 'expiring-item';
@@ -64,10 +66,12 @@ class UIRenderer {
         // Actions
         const cardActions = document.createElement('div');
         cardActions.className = 'card-header-actions';
+
         const editBtn = document.createElement('button');
         editBtn.className = 'secondary-btn';
         editBtn.textContent = 'Edit';
         editBtn.onclick = () => this.renderCardEdit(card);
+
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'danger-btn';
         deleteBtn.textContent = 'Delete';
@@ -80,6 +84,7 @@ class UIRenderer {
         // Body
         const cardBody = document.createElement('div');
         cardBody.className = 'card-body';
+
         const benefitList = document.createElement('ul');
         benefitList.className = 'benefit-list';
         if (card.benefits.length > 0) {
@@ -96,12 +101,15 @@ class UIRenderer {
         const showBtn = document.createElement('button');
         showBtn.className = 'secondary-btn show-add-benefit-btn';
         showBtn.textContent = 'Add New Benefit';
+
         const form = this.createAddBenefitForm(card.id);
         form.style.display = 'none';
+
         showBtn.onclick = () => {
             showBtn.style.display = 'none';
             form.style.display = 'flex';
         };
+
         addBenefitContainer.appendChild(showBtn);
         addBenefitContainer.appendChild(form);
 
@@ -109,12 +117,10 @@ class UIRenderer {
         cardBody.appendChild(addBenefitContainer);
         cardDiv.appendChild(cardHeader);
         cardDiv.appendChild(cardBody);
+
         return cardDiv;
     }
 
-    /**
-     * UPDATED: Now includes Smart Increment Logic
-     */
     createBenefitElement(benefit, card) {
         const li = document.createElement('li');
         li.className = 'benefit-item';
@@ -125,20 +131,32 @@ class UIRenderer {
         const isUsed = remaining <= 0;
         if (isUsed) li.classList.add('benefit-used');
 
+        // --- NEW: Check for active auto-claim ---
+        const isAutoClaimed = benefit.autoClaim === true &&
+            benefit.autoClaimEndDate &&
+            new Date(benefit.autoClaimEndDate) >= this.app.today;
+
         // Details
         const detailsDiv = document.createElement('div');
         detailsDiv.className = 'details';
         detailsDiv.style.cursor = 'pointer';
+
+        let titleHtml = `<span class="description">${benefit.description}</span>`;
+        // Append badge if active
+        if (isAutoClaimed) {
+            titleHtml += `<span class="auto-claim-badge">🔄 Auto-Claim</span>`;
+        }
+
         detailsDiv.innerHTML = `
-            <span class="description">${benefit.description}</span>
+            <div>${titleHtml}</div>
             <span class="status" style="color: ${isUsed ? 'var(--success)' : 'var(--danger)'}">
                 $${remaining.toFixed(2)} remaining
             </span>
         `;
         detailsDiv.onclick = (e) => {
             if (e.target.closest('.edit-form')) return;
-            if (e.target.closest('.smart-stepper-btn')) return; // Don't toggle on button click
-            if (e.target.tagName === 'INPUT') return; // Don't toggle on input click
+            if (e.target.closest('.smart-stepper-btn')) return;
+            if (e.target.tagName === 'INPUT') return;
             li.classList.toggle('benefit-used');
         };
 
@@ -164,57 +182,47 @@ class UIRenderer {
             nextResetDiv.textContent = `One-time benefit`;
         }
 
-        // --- Controls ---
+        // Controls
         const controlsDiv = document.createElement('div');
         controlsDiv.className = 'benefit-controls';
 
         const updateLabel = document.createElement('label');
         updateLabel.textContent = 'Set used: $';
 
-        // --- NEW: Smart Input Wrapper ---
         const inputWrapper = document.createElement('div');
         inputWrapper.className = 'smart-input-wrapper';
 
-        // Decrease Button
         const decBtn = document.createElement('button');
         decBtn.className = 'smart-stepper-btn';
-        decBtn.textContent = '−'; // Minus sign
-        decBtn.tabIndex = -1; // Skip tab stop
+        decBtn.textContent = '−';
+        decBtn.tabIndex = -1;
 
-        // Input Field
         const updateInput = document.createElement('input');
         updateInput.type = 'number';
         updateInput.value = benefit.usedAmount.toFixed(2);
         updateInput.min = "0";
         updateInput.max = benefit.totalAmount;
-        updateInput.step = "0.01"; // Keep 0.01 to allow precise manual typing
+        updateInput.step = "0.01";
 
-        // Increase Button
         const incBtn = document.createElement('button');
         incBtn.className = 'smart-stepper-btn';
         incBtn.textContent = '+';
         incBtn.tabIndex = -1;
 
-        // --- SMART LOGIC ---
         const getSmartStep = () => {
             if (benefit.totalAmount >= 200) return 5;
             if (benefit.totalAmount >= 10) return 1;
             return 0.01;
         };
 
-        // Snap logic: rounds current value to nearest step, then moves up/down
         const handleSmartIncrement = (direction) => {
             const step = getSmartStep();
             let current = parseFloat(updateInput.value) || 0;
             let nextVal;
 
             if (direction === 'up') {
-                // Floor divides by step to find "grid slot", adds 1 to move to next slot
-                // e.g., 10.25 (step 1) -> floor(10.25) = 10 -> 10 + 1 = 11.00
                 nextVal = (Math.floor(current / step) + 1) * step;
             } else {
-                // Ceil ensures 10.25 (step 1) -> ceil(10.25) = 11 -> 11 - 1 = 10.00
-                // Check if exact match to avoid staying on same number due to float precision
                 if (current % step === 0) {
                     nextVal = current - step;
                 } else {
@@ -222,39 +230,21 @@ class UIRenderer {
                 }
             }
 
-            // Bounds checking
             if (nextVal < 0) nextVal = 0;
             if (nextVal > benefit.totalAmount) nextVal = benefit.totalAmount;
-
-            // Fix float precision issues (e.g. 10.00000001)
             nextVal = parseFloat(nextVal.toFixed(2));
 
             updateInput.value = nextVal.toFixed(2);
-            // Trigger update
             this.app.handleUpdateBenefitUsage(benefit.id, nextVal);
         };
 
-        decBtn.onclick = (e) => {
-            e.stopPropagation();
-            handleSmartIncrement('down');
-        };
-        incBtn.onclick = (e) => {
-            e.stopPropagation();
-            handleSmartIncrement('up');
-        };
+        decBtn.onclick = (e) => { e.stopPropagation(); handleSmartIncrement('down'); };
+        incBtn.onclick = (e) => { e.stopPropagation(); handleSmartIncrement('up'); };
 
-        // Input Event Listeners
-        updateInput.onfocus = (e) => {
-            e.target.select();
-        }; // Highlight for easy typing
-        updateInput.onblur = (e) => {
-            if (e.target.value === '') e.target.value = benefit.usedAmount.toFixed(2);
-        };
-        updateInput.onchange = (e) => {
-            this.app.handleUpdateBenefitUsage(benefit.id, parseFloat(e.target.value));
-        };
+        updateInput.onfocus = (e) => { e.target.select(); };
+        updateInput.onblur = (e) => { if (e.target.value === '') e.target.value = benefit.usedAmount.toFixed(2); };
+        updateInput.onchange = (e) => { this.app.handleUpdateBenefitUsage(benefit.id, parseFloat(e.target.value)); };
 
-        // Assemble Wrapper
         inputWrapper.appendChild(decBtn);
         inputWrapper.appendChild(updateInput);
         inputWrapper.appendChild(incBtn);
@@ -265,6 +255,7 @@ class UIRenderer {
         editBtn.className = 'secondary-btn';
         editBtn.textContent = 'Edit';
         editBtn.onclick = () => this.renderBenefitEdit(benefit, card);
+
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'danger-btn';
         deleteBtn.textContent = 'Delete';
@@ -274,7 +265,7 @@ class UIRenderer {
         rightControls.appendChild(deleteBtn);
 
         controlsDiv.appendChild(updateLabel);
-        controlsDiv.appendChild(inputWrapper); // Add wrapper instead of raw input
+        controlsDiv.appendChild(inputWrapper);
         controlsDiv.appendChild(rightControls);
 
         li.appendChild(detailsDiv);
@@ -286,7 +277,6 @@ class UIRenderer {
         return li;
     }
 
-    // ... (createAddBenefitForm, renderCardEdit, renderBenefitEdit remain unchanged) ...
     createAddBenefitForm(cardId) {
         const form = document.createElement('form');
         form.className = 'benefit-form';
@@ -327,6 +317,18 @@ class UIRenderer {
                     </select>
                 </div>
             </div>
+            
+            <div class="form-row" id="auto-claim-row-${uId}" style="display:none; border-top:1px dashed #ccc; padding-top:10px;">
+                <div class="form-group" style="flex-direction:row; align-items:center; gap:10px; flex:0;">
+                    <input type="checkbox" name="autoClaim" id="ac-check-${uId}" style="width:auto;">
+                    <label for="ac-check-${uId}" style="margin:0;">Auto-Claim?</label>
+                </div>
+                <div class="form-group" id="ac-date-group-${uId}" style="display:none;">
+                    <label style="margin-bottom:2px;">Until Date</label>
+                    <input type="date" name="autoClaimEndDate">
+                </div>
+            </div>
+
             <button type="submit">Add Benefit</button>
         `;
 
@@ -334,14 +336,27 @@ class UIRenderer {
         const resetGroup = form.querySelector(`#reset-group-${uId}`);
         const resetSelect = form.querySelector(`#reset-${uId}`);
 
+        const acRow = form.querySelector(`#auto-claim-row-${uId}`);
+        const acCheck = form.querySelector(`#ac-check-${uId}`);
+        const acDateGroup = form.querySelector(`#ac-date-group-${uId}`);
+
         freqSelect.onchange = (e) => {
-            if (e.target.value === 'one-time') {
+            const isOneTime = e.target.value === 'one-time';
+            if (isOneTime) {
                 resetGroup.style.display = 'none';
                 resetSelect.required = false;
+                acRow.style.display = 'none'; // Hide auto-claim for one-time
             } else {
                 resetGroup.style.display = 'block';
                 resetSelect.required = true;
+                acRow.style.display = 'flex'; // Show auto-claim for recurring
             }
+        };
+
+        acCheck.onchange = (e) => {
+            acDateGroup.style.display = e.target.checked ? 'flex' : 'none';
+            const dateInput = acDateGroup.querySelector('input');
+            dateInput.required = e.target.checked;
         };
 
         form.onsubmit = (e) => {
@@ -352,10 +367,15 @@ class UIRenderer {
                 totalAmount: parseFloat(formData.get('totalAmount')),
                 frequency: formData.get('frequency'),
                 resetType: formData.get('frequency') === 'one-time' ? null : formData.get('resetType'),
+                // Capture new fields
+                autoClaim: formData.get('autoClaim') === 'on',
+                autoClaimEndDate: formData.get('autoClaimEndDate') || null
             };
             this.app.handleAddBenefit(cardId, benefitData);
             e.target.reset();
             resetGroup.style.display = 'none';
+            acRow.style.display = 'none';
+            acDateGroup.style.display = 'none';
             form.style.display = 'none';
             form.previousElementSibling.style.display = 'block';
         };
@@ -365,6 +385,7 @@ class UIRenderer {
     renderCardEdit(card) {
         const cardEl = document.querySelector(`.card[data-card-id="${card.id}"]`);
         if (!cardEl) return;
+
         const form = document.createElement('div');
         form.className = 'edit-form';
         const uId = Math.random().toString(36).substr(2, 9);
@@ -386,27 +407,30 @@ class UIRenderer {
                 <button id="save-${uId}">Save Changes</button>
             </div>
         `;
+
         cardEl.innerHTML = '';
         cardEl.appendChild(form);
+
         document.getElementById(`save-${uId}`).onclick = () => {
             const newName = document.getElementById(`name-${uId}`).value.trim();
             const newDate = document.getElementById(`date-${uId}`).value;
-            if (newName && newDate) {
-                this.app.handleUpdateCard(card.id, newName, newDate);
-            }
+            if (newName && newDate) { this.app.handleUpdateCard(card.id, newName, newDate); }
         };
-        document.getElementById(`cancel-${uId}`).onclick = () => {
-            this.app.render();
-        };
+        document.getElementById(`cancel-${uId}`).onclick = () => { this.app.render(); };
     }
 
     renderBenefitEdit(benefit, card) {
         const benefitEl = document.querySelector(`.benefit-item[data-benefit-id="${benefit.id}"]`);
         if (!benefitEl) return;
+
         const form = document.createElement('div');
         form.className = 'edit-form';
         form.style.marginBottom = '0';
         const uId = Math.random().toString(36).substr(2, 9);
+
+        const isRecurring = benefit.frequency !== 'one-time';
+        const hasAutoClaim = benefit.autoClaim === true;
+
         form.innerHTML = `
             <h3 style="margin: 0; font-size: 1.1rem;">Editing: ${benefit.description}</h3>
             <div class="form-row">
@@ -433,49 +457,71 @@ class UIRenderer {
                 </div>
             </div>
             <div class="form-row">
-                <div class="form-group" id="reset-group-${uId}" style="display: ${benefit.frequency === 'one-time' ? 'none' : 'block'};">
+                <div class="form-group" id="reset-group-${uId}" style="display: ${isRecurring ? 'block' : 'none'};">
                     <label>Reset Type</label>
-                    <select id="reset-${uId}" ${benefit.frequency === 'one-time' ? '' : 'required'}>
+                    <select id="reset-${uId}" ${isRecurring ? 'required' : ''}>
                         <option value="calendar" ${benefit.resetType === 'calendar' ? 'selected' : ''}>Calendar</option>
                         <option value="anniversary" ${benefit.resetType === 'anniversary' ? 'selected' : ''}>Anniversary-Dated</option>
                     </select>
                 </div>
             </div>
+
+            <div class="form-row" id="auto-claim-row-${uId}" style="display:${isRecurring ? 'flex' : 'none'}; border-top:1px dashed #ccc; padding-top:10px;">
+                <div class="form-group" style="flex-direction:row; align-items:center; gap:10px; flex:0;">
+                    <input type="checkbox" id="ac-check-${uId}" style="width:auto;" ${hasAutoClaim ? 'checked' : ''}>
+                    <label for="ac-check-${uId}" style="margin:0;">Auto-Claim?</label>
+                </div>
+                <div class="form-group" id="ac-date-group-${uId}" style="display:${hasAutoClaim ? 'flex' : 'none'};">
+                    <label style="margin-bottom:2px;">Until Date</label>
+                    <input type="date" id="ac-date-${uId}" value="${benefit.autoClaimEndDate || ''}" ${hasAutoClaim ? 'required' : ''}>
+                </div>
+            </div>
+
             <div class="form-row" style="justify-content: flex-end;">
                 <button class="secondary-btn" id="cancel-${uId}">Cancel</button>
                 <button id="save-${uId}">Save Changes</button>
             </div>
         `;
+
         benefitEl.innerHTML = '';
         benefitEl.appendChild(form);
+
         const freqSelect = document.getElementById(`freq-${uId}`);
         const resetGroup = document.getElementById(`reset-group-${uId}`);
         const resetSelect = document.getElementById(`reset-${uId}`);
+        const acRow = document.getElementById(`auto-claim-row-${uId}`);
+        const acCheck = document.getElementById(`ac-check-${uId}`);
+        const acDateGroup = document.getElementById(`ac-date-group-${uId}`);
+        const acDateInput = document.getElementById(`ac-date-${uId}`);
+
         freqSelect.onchange = (e) => {
             if (e.target.value === 'one-time') {
-                resetGroup.style.display = 'none';
-                resetSelect.required = false;
+                resetGroup.style.display = 'none'; resetSelect.required = false;
+                acRow.style.display = 'none';
             } else {
-                resetGroup.style.display = 'block';
-                resetSelect.required = true;
+                resetGroup.style.display = 'block'; resetSelect.required = true;
+                acRow.style.display = 'flex';
             }
         };
+
+        acCheck.onchange = (e) => {
+            acDateGroup.style.display = e.target.checked ? 'flex' : 'none';
+            acDateInput.required = e.target.checked;
+        };
+
         document.getElementById(`save-${uId}`).onclick = () => {
             const newData = {
                 description: document.getElementById(`desc-${uId}`).value.trim(),
                 totalAmount: parseFloat(document.getElementById(`amt-${uId}`).value),
                 frequency: freqSelect.value,
-                resetType: null
+                resetType: null,
+                // Capture Auto Claim updates
+                autoClaim: acCheck.checked,
+                autoClaimEndDate: acCheck.checked ? acDateInput.value : null
             };
-            if (newData.frequency !== 'one-time') {
-                newData.resetType = resetSelect.value;
-            }
-            if (newData.description && newData.totalAmount) {
-                this.app.handleUpdateBenefit(benefit.id, newData);
-            }
+            if (newData.frequency !== 'one-time') { newData.resetType = resetSelect.value; }
+            if (newData.description && newData.totalAmount) { this.app.handleUpdateBenefit(benefit.id, newData); }
         };
-        document.getElementById(`cancel-${uId}`).onclick = () => {
-            this.app.render();
-        };
+        document.getElementById(`cancel-${uId}`).onclick = () => { this.app.render(); };
     }
 }
