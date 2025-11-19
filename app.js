@@ -42,7 +42,7 @@ class BenefitTrackerApp {
         this.addCardForm.addEventListener('submit', this.handleAddCard.bind(this));
         this.expiringDaysSelect.addEventListener('change', (e) => {
             this.expiringDays = parseInt(e.target.value, 10);
-            this.render(); // Re-render entire view
+            this.render();
         });
 
         this.showAddCardBtn.addEventListener('click', () => {
@@ -378,7 +378,6 @@ class BenefitTrackerApp {
             this.cardListContainer.appendChild(cardEl);
         });
 
-        // --- NEW: Init Sortables after rendering ---
         this.initSortables();
     }
 

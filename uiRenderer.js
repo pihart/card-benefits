@@ -8,36 +8,11 @@ class UIRenderer {
 
     // ... (renderExpiringSoon unchanged) ...
     renderExpiringSoon(activeItems, ignoredItems, fullyUsedItems, days, mainOpen, isIgnoredOpen, isFullyUsedOpen) {
-        const container = document.getElementById('expiring-soon-container');
-        const title = `🔥 Expiring Soon (${activeItems.length})`;
-
-        container.innerHTML = `
-            <details class="expiring-widget-details" ${mainOpen ? 'open' : ''}>
-                <summary class="expiring-widget-summary">${title}</summary>
-                <div class="expiring-content-wrapper">
-                    <div class="expiring-controls">
-                        <div class="form-group">
-                            <label for="expiring-days-select-render">Expires in:</label>
-                            <select id="expiring-days-select-render">
-                                <option value="7" ${days === 7 ? 'selected' : ''}>7 Days</option>
-                                <option value="14" ${days === 14 ? 'selected' : ''}>14 Days</option>
-                                <option value="30" ${days === 30 ? 'selected' : ''}>30 Days</option>
-                                <option value="60" ${days === 60 ? 'selected' : ''}>60 Days</option>
-                            </select>
-                        </div>
-                    </div>
-                    <ul id="expiring-active-list" class="expiring-list"></ul>
-                    <div id="expiring-subsections"></div>
-                </div>
-            </details>
-        `;
-
-        document.getElementById('expiring-days-select-render').addEventListener('change', (e) => {
-            this.app.handleExpiringDaysChange(e);
-        });
-
         const activeList = document.getElementById('expiring-active-list');
         const subsections = document.getElementById('expiring-subsections');
+
+        activeList.textContent = "";
+        subsections.textContent = "";
 
         const createItem = (item, isFull) => {
             const li = document.createElement('li');

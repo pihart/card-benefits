@@ -32,21 +32,29 @@
 
     <aside class="sidebar-content">
         <section id="expiring-soon-container" class="expiring-soon-container">
-            <div class="expiring-header">
-                <h2>🔥 Expiring Soon</h2>
-                <div class="form-group">
-                    <label for="expiring-days-select">Expires in:</label>
-                    <select id="expiring-days-select">
-                        <option value="7">7 Days</option>
-                        <option value="14">14 Days</option>
-                        <option value="30" selected>30 Days</option>
-                        <option value="60">60 Days</option>
-                    </select>
+            <details class="expiring-widget-details" open>
+                <summary class="expiring-widget-summary">🔥 Expiring Soon</summary>
+                <div class="expiring-content-wrapper">
+                    <div class="expiring-controls">
+                        <div class="form-group">
+                            <label for="expiring-days-select">Expires in:</label>
+                            <select id="expiring-days-select">
+                                <option value="7">7 Days</option>
+                                <option value="14">14 Days</option>
+                                <option value="30" selected>30 Days</option>
+                                <option value="60">60 Days</option>
+                                <option value="90">90 Days</option>
+                                <option value="120">120 Days</option>
+                            </select>
+                        </div>
+                    </div>
+                    <ul id="expiring-active-list" class="expiring-list"></ul>
+                    <div id="expiring-subsections"></div>
                 </div>
-            </div>
-            <ul id="expiring-soon-list" class="expiring-list">
-            </ul>
+            </details>
+
         </section>
+
     </aside>
 
     <main>
