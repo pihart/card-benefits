@@ -30,6 +30,7 @@ class BenefitTrackerApp {
         this.newCardAnniversaryInput = document.getElementById('new-card-anniversary');
 
         // Settings References
+        this.settingsSaveBtn = document.getElementById('settings-save');
         this.s3UrlInput = document.getElementById('s3-url-input');
         this.pollIntervalInput = document.getElementById('poll-interval-input');
         this.currentStorageLabel = document.getElementById('current-storage-type');
