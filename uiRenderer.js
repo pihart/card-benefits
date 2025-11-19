@@ -6,7 +6,7 @@ class UIRenderer {
         this.app = app; // Reference to the main controller
     }
 
-    renderExpiringSoon(activeItems, ignoredItems, days) {
+    renderExpiringSoon(activeItems, ignoredItems, days, isIgnoredOpen) {
         const container = document.getElementById('expiring-soon-container');
         const list = document.getElementById('expiring-soon-list');
 
@@ -22,7 +22,6 @@ class UIRenderer {
             return;
         }
 
-        // Helper to create items
         const createItem = (item) => {
             const li = document.createElement('li');
             li.className = 'expiring-item';
@@ -39,48 +38,43 @@ class UIRenderer {
 
         activeItems.forEach(item => list.appendChild(createItem(item)));
 
-        // 2. Render Ignored Subsection (if any)
+        // 2. Render Ignored Subsection
         if (ignoredItems.length > 0) {
             const details = document.createElement('details');
             details.className = 'ignored-section';
+            if (isIgnoredOpen) {
+                details.setAttribute('open', 'true');
+            }
 
             const summary = document.createElement('summary');
             summary.textContent = `Ignored Items (${ignoredItems.length})`;
             details.appendChild(summary);
 
             const ignoredList = document.createElement('ul');
-            ignoredList.className = 'expiring-list'; // Reuse style
+            ignoredList.className = 'expiring-list';
             ignoredList.style.marginTop = '0';
-
             ignoredItems.forEach(item => ignoredList.appendChild(createItem(item)));
-
             details.appendChild(ignoredList);
-            // Append subsection to main list container
-            // Note: We append 'details' directly to 'list' parent or keep it separate?
-            // Let's append to 'list' but wrap in li or just append to container?
-            // Ideally append to container so it's separate from the UL.
 
-            // Actually, the UL is for list items. Let's close UL and append details to container.
-            // But 'renderExpiringSoon' only controls 'list'.
-            // Let's append the details *after* the list in the container.
-
-            // CLEAR previous subsection if exists
             const oldDetails = container.querySelector('.ignored-section');
             if (oldDetails) oldDetails.remove();
 
             container.appendChild(details);
         } else {
-            // Cleanup if no ignored items
             const oldDetails = container.querySelector('.ignored-section');
             if (oldDetails) oldDetails.remove();
         }
     }
 
-    createCardElement(card, allBenefitsUsed) {
+    createCardElement(card, isCollapsed) {
         const cardDiv = document.createElement('div');
         cardDiv.className = 'card';
         cardDiv.dataset.cardId = card.id;
-        if (allBenefitsUsed) cardDiv.classList.add('card-collapsed');
+
+        // Use the explicit state passed from App logic
+        if (isCollapsed) {
+            cardDiv.classList.add('card-collapsed');
+        }
 
         // Header
         const cardHeader = document.createElement('div');
@@ -127,13 +121,7 @@ class UIRenderer {
 
         const benefitList = document.createElement('ul');
         benefitList.className = 'benefit-list';
-        if (card.benefits.length > 0) {
-            card.benefits.forEach(benefit => {
-                benefitList.appendChild(this.createBenefitElement(benefit, card));
-            });
-        } else {
-            benefitList.innerHTML = '<li>No benefits added for this card yet.</li>';
-        }
+        // Empty list - App.js will populate
 
         // Add Benefit Form
         const addBenefitContainer = document.createElement('div');
@@ -161,7 +149,7 @@ class UIRenderer {
         return cardDiv;
     }
 
-    createBenefitElement(benefit, card) {
+    createBenefitElement(benefit, card, isCollapsed) {
         const li = document.createElement('li');
         li.className = 'benefit-item';
         li.dataset.benefitId = benefit.id;
@@ -170,14 +158,13 @@ class UIRenderer {
         const progressPercent = (benefit.totalAmount > 0) ? (benefit.usedAmount / benefit.totalAmount) * 100 : 0;
         const isUsed = remaining <= 0;
 
-        // --- Check for Active Statuses ---
         const isAutoClaimed = this.app.isAutoClaimActive(benefit);
         const isIgnored = this.app.isIgnoredActive(benefit);
 
-        // Apply collapse class if used OR ignored
-        if (isUsed || isIgnored) li.classList.add('benefit-used'); // Reusing 'benefit-used' style for collapse
+        // Use passed state
+        if (isCollapsed) li.classList.add('benefit-used');
 
-        // Apply specific ignored class for styling if needed (optional)
+        // Add ignored class for styling if needed
         if (isIgnored) li.classList.add('benefit-ignored');
 
         // Details
@@ -335,6 +322,7 @@ class UIRenderer {
         return li;
     }
 
+    // ... (createAddBenefitForm, renderCardEdit, renderBenefitEdit remain unchanged)
     createAddBenefitForm(cardId) {
         const form = document.createElement('form');
         form.className = 'benefit-form';
@@ -428,7 +416,6 @@ class UIRenderer {
             }
         };
 
-        // Mutual Exclusivity Logic
         acCheck.onchange = (e) => {
             acDateGroup.style.display = e.target.checked ? 'flex' : 'none';
             acDateGroup.querySelector('input').required = e.target.checked;
@@ -464,7 +451,6 @@ class UIRenderer {
             };
             this.app.handleAddBenefit(cardId, benefitData);
             e.target.reset();
-            // UI Reset
             resetGroup.style.display = 'none';
             acRow.style.display = 'none';
             acDateGroup.style.display = 'none';
@@ -599,7 +585,6 @@ class UIRenderer {
         const freqSelect = document.getElementById(`freq-${uId}`);
         const resetGroup = document.getElementById(`reset-group-${uId}`);
         const resetSelect = document.getElementById(`reset-${uId}`);
-
         const acRow = document.getElementById(`auto-claim-row-${uId}`);
         const acCheck = document.getElementById(`ac-check-${uId}`);
         const acDateGroup = document.getElementById(`ac-date-group-${uId}`);

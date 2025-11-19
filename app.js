@@ -136,9 +136,6 @@ class BenefitTrackerApp {
         }
     }
 
-    /**
-     * Helper to determine if Auto-Claim is currently valid
-     */
     isAutoClaimActive(benefit) {
         if (benefit.frequency === 'one-time') return false;
         if (benefit.autoClaim !== true) return false;
@@ -149,9 +146,6 @@ class BenefitTrackerApp {
         return endDate >= this.today;
     }
 
-    /**
-     * NEW: Helper to determine if Ignore is currently valid
-     */
     isIgnoredActive(benefit) {
         if (benefit.frequency === 'one-time') return false;
         if (benefit.ignored !== true) return false;
@@ -181,17 +175,14 @@ class BenefitTrackerApp {
 
                 if (nextReset <= this.today) {
                     if (this.isAutoClaimActive(benefit)) {
-                        // Auto-Claim reset: Mark used immediately
                         benefit.lastReset = this.today.toISOString();
                         benefit.usedAmount = benefit.totalAmount;
                         stateChanged = true;
                     } else if (this.isIgnoredActive(benefit)) {
-                        // NEW: Ignored reset: Reset dates, reset amount to 0, do NOT prompt user
                         benefit.lastReset = this.today.toISOString();
                         benefit.usedAmount = 0;
                         stateChanged = true;
                     } else {
-                        // Manual reset
                         pendingManualResets.push({cardName: card.name, benefit: benefit});
                     }
                 }
@@ -227,10 +218,31 @@ class BenefitTrackerApp {
 
     // --- Rendering Proxy ---
     render() {
-        // Separate expiring items into active and ignored
+        // 1. SNAPSHOT UI STATE
+        const cardState = new Map();
+        const benefitState = new Map(); // Stores true if collapsed (has .benefit-used), false if expanded
+        let ignoredSectionOpen = false;
+
+        // Snapshot Cards
+        this.cardListContainer.querySelectorAll('.card').forEach(el => {
+            cardState.set(el.dataset.cardId, el.classList.contains('card-collapsed'));
+        });
+
+        // Snapshot Benefits (inside cards)
+        this.cardListContainer.querySelectorAll('.benefit-item').forEach(el => {
+            // If it has 'benefit-used', it is visually collapsed.
+            benefitState.set(el.dataset.benefitId, el.classList.contains('benefit-used'));
+        });
+
+        // Snapshot Expiring Ignored Section
+        const ignoredDetails = document.querySelector('.ignored-section');
+        if (ignoredDetails && ignoredDetails.hasAttribute('open')) {
+            ignoredSectionOpen = true;
+        }
+
+        // 2. Calculate Data
         const expiringActive = [];
         const expiringIgnored = [];
-
         const limitDate = new Date(this.today.getTime());
         limitDate.setDate(this.today.getDate() + this.expiringDays);
 
@@ -243,7 +255,6 @@ class BenefitTrackerApp {
 
                 if (next > this.today && next <= limitDate) {
                     const item = {cardName: card.name, benefit: benefit, remainingAmount: rem, nextResetDate: next};
-
                     if (this.isIgnoredActive(benefit)) {
                         expiringIgnored.push(item);
                     } else {
@@ -253,19 +264,55 @@ class BenefitTrackerApp {
             });
         });
 
-        // Sort both lists
         const sortFn = (a, b) => b.remainingAmount - a.remainingAmount;
         expiringActive.sort(sortFn);
         expiringIgnored.sort(sortFn);
 
-        this.ui.renderExpiringSoon(expiringActive, expiringIgnored, this.expiringDays);
+        // 3. Render Expiring Section (Pass ignored section state)
+        this.ui.renderExpiringSoon(expiringActive, expiringIgnored, this.expiringDays, ignoredSectionOpen);
 
+        // 4. Render Cards
         this.cardListContainer.innerHTML = '';
         if (this.cards.length === 0) this.cardListContainer.innerHTML = '<p>No cards added yet.</p>';
 
         this.cards.forEach(card => {
+            // Default Card State: Collapse if all used
             const allUsed = card.benefits.length > 0 && card.benefits.every(b => (b.totalAmount - b.usedAmount) <= 0);
-            this.cardListContainer.appendChild(this.ui.createCardElement(card, allUsed));
+            let isCardCollapsed = allUsed;
+
+            // Restore Card State
+            if (cardState.has(card.id)) {
+                isCardCollapsed = cardState.get(card.id);
+            }
+
+            // Generate Card Element
+            const cardEl = this.ui.createCardElement(card, isCardCollapsed);
+
+            // 5. Inject Benefits with Restored State
+            const benefitList = cardEl.querySelector('.benefit-list');
+            benefitList.innerHTML = ''; // Clear default placeholder if any
+
+            if (card.benefits.length > 0) {
+                card.benefits.forEach(benefit => {
+                    // Determine Benefit State
+                    const isUsed = (benefit.totalAmount - benefit.usedAmount) <= 0;
+                    const isIgnored = this.isIgnoredActive(benefit);
+
+                    // Default: Collapsed if used or ignored
+                    let isBenefitCollapsed = isUsed || isIgnored;
+
+                    // Restore: If we have a previous state, use that
+                    if (benefitState.has(benefit.id)) {
+                        isBenefitCollapsed = benefitState.get(benefit.id);
+                    }
+
+                    benefitList.appendChild(this.ui.createBenefitElement(benefit, card, isBenefitCollapsed));
+                });
+            } else {
+                benefitList.innerHTML = '<li>No benefits added for this card yet.</li>';
+            }
+
+            this.cardListContainer.appendChild(cardEl);
         });
     }
 
@@ -312,9 +359,7 @@ class BenefitTrackerApp {
             if (this.isAutoClaimActive(newBenefit)) {
                 newBenefit.usedAmount = newBenefit.totalAmount;
             }
-            // Enforce Mutual Exclusivity (UI should handle, but data layer check is good)
             if (newBenefit.autoClaim && newBenefit.ignored) {
-                // Prefer auto-claim or throw error. Let's prioritize auto-claim and disable ignore.
                 newBenefit.ignored = false;
                 newBenefit.ignoredEndDate = null;
             }
@@ -368,14 +413,11 @@ class BenefitTrackerApp {
             if (b) {
                 Object.assign(b, data);
 
-                // Enforce Mutual Exclusivity in Data
                 if (b.autoClaim && b.ignored) {
-                    // If updated to both (shouldn't happen via UI), prioritize AutoClaim
                     b.ignored = false;
                     b.ignoredEndDate = null;
                 }
 
-                // Enforce AC immediately on update
                 if (this.isAutoClaimActive(b)) {
                     b.usedAmount = b.totalAmount;
                 } else if (b.usedAmount > b.totalAmount) {
