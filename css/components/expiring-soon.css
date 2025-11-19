@@ -1,27 +1,58 @@
 /* --- Expiring Soon Widget --- */
 .expiring-soon-container {
-    padding: 20px;
     background-color: var(--warning-bg);
     border: 1px solid var(--warning-border);
     border-radius: var(--border-radius);
     color: var(--warning-text);
+    /* Remove padding here, move to summary/content to handle collapse cleanly */
+    padding: 0;
+    overflow: hidden;
 }
 
-.expiring-header {
+/* Main Widget Details/Summary */
+.expiring-widget-details {
+    width: 100%;
+}
+
+.expiring-widget-summary {
+    padding: 15px 20px;
+    cursor: pointer;
+    list-style: none; /* Hide default marker */
     display: flex;
     justify-content: space-between;
     align-items: center;
-    flex-wrap: wrap;
-    gap: 15px;
+    font-weight: bold;
+    font-size: 1.1rem;
+    background-color: rgba(255, 255, 255, 0.1);
 }
 
-.expiring-header h2 {
-    color: var(--warning-text);
-    border-bottom: 2px solid var(--warning-text);
-    margin-top: 0;
+.expiring-widget-summary::-webkit-details-marker {
+    display: none;
 }
 
-.expiring-header .form-group {
+/* Add custom arrow */
+.expiring-widget-summary::after {
+    content: '▼';
+    font-size: 0.8rem;
+    transition: transform 0.2s;
+}
+
+.expiring-widget-details[open] .expiring-widget-summary::after {
+    transform: rotate(180deg);
+}
+
+.expiring-content-wrapper {
+    padding: 0 20px 20px 20px;
+}
+
+/* Header inside the content */
+.expiring-controls {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 15px;
+}
+
+.expiring-controls .form-group {
     flex-direction: row;
     align-items: center;
     gap: 10px;
@@ -29,22 +60,23 @@
     flex: 0 1 auto;
 }
 
-.expiring-header .form-group label {
+.expiring-controls .form-group label {
     margin-bottom: 0;
     font-weight: normal;
     white-space: nowrap;
+    font-size: 0.85rem;
 }
 
-.expiring-header .form-group select {
+.expiring-controls .form-group select {
     width: auto;
-    font-size: 0.9rem;
-    padding: 5px 8px;
+    font-size: 0.85rem;
+    padding: 3px 8px;
 }
 
 .expiring-list {
     list-style: none;
     padding: 0;
-    margin: 15px 0 0 0;
+    margin: 0;
 }
 
 .expiring-item {
@@ -69,7 +101,7 @@
 }
 
 .expiring-item-amount {
-    font-size: 1.25rem;
+    font-size: 1.1rem;
     font-weight: bold;
     color: var(--danger);
     flex-shrink: 0;
@@ -77,45 +109,53 @@
 
 .expiring-item-details {
     flex-grow: 1;
-    min-width: 200px;
+    min-width: 150px;
 }
 
 .expiring-item-benefit {
     font-weight: bold;
     color: var(--dark-gray);
+    font-size: 0.95rem;
 }
 
 .expiring-item-card {
-    font-size: 0.9rem;
+    font-size: 0.8rem;
     color: var(--secondary-color);
 }
 
 .expiring-item-date {
-    font-size: 0.9rem;
+    font-size: 0.8rem;
     font-weight: bold;
     color: var(--warning-text);
-    background-color: var(--warning-bg);
-    padding: 3px 8px;
+    background-color: rgba(255, 255, 255, 0.5);
+    padding: 3px 6px;
     border-radius: 4px;
     flex-shrink: 0;
 }
 
-/* --- NEW: Ignored Subsection --- */
-.ignored-section {
-    margin-top: 15px;
-    border-top: 1px solid var(--warning-border);
+/* --- Subsections (Ignored & Fully Used) --- */
+.expiring-subsection {
+    margin-top: 10px;
+    border-top: 1px solid rgba(0, 0, 0, 0.05);
     padding-top: 10px;
 }
 
-.ignored-section summary {
+.expiring-subsection summary {
     cursor: pointer;
     font-weight: bold;
-    color: var(--secondary-color);
+    font-size: 0.9rem;
+    color: var(--warning-text); /* Match theme */
+    opacity: 0.8;
     margin-bottom: 10px;
+    outline: none;
 }
 
-/* Style items inside ignored section slightly differently to distinguish */
-.ignored-section .expiring-item {
-    opacity: 0.8;
-    background-color: #f9f9f9;
+.expiring-subsection .expiring-item {
+    opacity: 0.7;
+    background-color: rgba(255, 255, 255, 0.6);
+    border-color: transparent;
+}
+
+.expiring-subsection .expiring-item-amount {
+    color: var(--success); /* Green for used */
 }

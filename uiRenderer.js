@@ -6,27 +6,46 @@ class UIRenderer {
         this.app = app; // Reference to the main controller
     }
 
-    renderExpiringSoon(activeItems, ignoredItems, days, isIgnoredOpen) {
+    // ... (renderExpiringSoon unchanged) ...
+    renderExpiringSoon(activeItems, ignoredItems, fullyUsedItems, days, mainOpen, isIgnoredOpen, isFullyUsedOpen) {
         const container = document.getElementById('expiring-soon-container');
-        const list = document.getElementById('expiring-soon-list');
+        const title = `🔥 Expiring Soon (${activeItems.length})`;
 
-        container.style.display = 'block';
-        list.innerHTML = '';
+        container.innerHTML = `
+            <details class="expiring-widget-details" ${mainOpen ? 'open' : ''}>
+                <summary class="expiring-widget-summary">${title}</summary>
+                <div class="expiring-content-wrapper">
+                    <div class="expiring-controls">
+                        <div class="form-group">
+                            <label for="expiring-days-select-render">Expires in:</label>
+                            <select id="expiring-days-select-render">
+                                <option value="7" ${days === 7 ? 'selected' : ''}>7 Days</option>
+                                <option value="14" ${days === 14 ? 'selected' : ''}>14 Days</option>
+                                <option value="30" ${days === 30 ? 'selected' : ''}>30 Days</option>
+                                <option value="60" ${days === 60 ? 'selected' : ''}>60 Days</option>
+                            </select>
+                        </div>
+                    </div>
+                    <ul id="expiring-active-list" class="expiring-list"></ul>
+                    <div id="expiring-subsections"></div>
+                </div>
+            </details>
+        `;
 
-        // 1. Render Active Items
-        if (activeItems.length === 0 && ignoredItems.length === 0) {
-            const li = document.createElement('li');
-            li.className = 'expiring-item-empty';
-            li.textContent = `No unused benefits are expiring within ${days} days.`;
-            list.appendChild(li);
-            return;
-        }
+        document.getElementById('expiring-days-select-render').addEventListener('change', (e) => {
+            this.app.handleExpiringDaysChange(e);
+        });
 
-        const createItem = (item) => {
+        const activeList = document.getElementById('expiring-active-list');
+        const subsections = document.getElementById('expiring-subsections');
+
+        const createItem = (item, isFull) => {
             const li = document.createElement('li');
             li.className = 'expiring-item';
             li.innerHTML = `
-                <span class="expiring-item-amount">$${item.remainingAmount.toFixed(2)}</span>
+                <span class="expiring-item-amount" style="${isFull ? 'color:var(--success)' : ''}">
+                    $${item.remainingAmount.toFixed(2)}
+                </span>
                 <div class="expiring-item-details">
                     <div class="expiring-item-benefit">${item.benefit.description}</div>
                     <div class="expiring-item-card">${item.cardName}</div>
@@ -36,33 +55,45 @@ class UIRenderer {
             return li;
         };
 
-        activeItems.forEach(item => list.appendChild(createItem(item)));
+        if (activeItems.length === 0) {
+            const li = document.createElement('li');
+            li.className = 'expiring-item-empty';
+            li.textContent = "No active benefits expiring soon.";
+            activeList.appendChild(li);
+        } else {
+            activeItems.forEach(item => activeList.appendChild(createItem(item, false)));
+        }
 
-        // 2. Render Ignored Subsection
         if (ignoredItems.length > 0) {
             const details = document.createElement('details');
-            details.className = 'ignored-section';
-            if (isIgnoredOpen) {
-                details.setAttribute('open', 'true');
-            }
+            details.className = 'expiring-subsection ignored-section';
+            if (isIgnoredOpen) details.setAttribute('open', 'true');
 
             const summary = document.createElement('summary');
             summary.textContent = `Ignored Items (${ignoredItems.length})`;
             details.appendChild(summary);
 
-            const ignoredList = document.createElement('ul');
-            ignoredList.className = 'expiring-list';
-            ignoredList.style.marginTop = '0';
-            ignoredItems.forEach(item => ignoredList.appendChild(createItem(item)));
-            details.appendChild(ignoredList);
+            const list = document.createElement('ul');
+            list.className = 'expiring-list';
+            ignoredItems.forEach(item => list.appendChild(createItem(item, false)));
+            details.appendChild(list);
+            subsections.appendChild(details);
+        }
 
-            const oldDetails = container.querySelector('.ignored-section');
-            if (oldDetails) oldDetails.remove();
+        if (fullyUsedItems.length > 0) {
+            const details = document.createElement('details');
+            details.className = 'expiring-subsection fully-used-section';
+            if (isFullyUsedOpen) details.setAttribute('open', 'true');
 
-            container.appendChild(details);
-        } else {
-            const oldDetails = container.querySelector('.ignored-section');
-            if (oldDetails) oldDetails.remove();
+            const summary = document.createElement('summary');
+            summary.textContent = `Fully Utilized (${fullyUsedItems.length})`;
+            details.appendChild(summary);
+
+            const list = document.createElement('ul');
+            list.className = 'expiring-list';
+            fullyUsedItems.forEach(item => list.appendChild(createItem(item, true)));
+            details.appendChild(list);
+            subsections.appendChild(details);
         }
     }
 
@@ -71,7 +102,6 @@ class UIRenderer {
         cardDiv.className = 'card';
         cardDiv.dataset.cardId = card.id;
 
-        // Use the explicit state passed from App logic
         if (isCollapsed) {
             cardDiv.classList.add('card-collapsed');
         }
@@ -81,9 +111,15 @@ class UIRenderer {
         cardHeader.className = 'card-header';
         cardHeader.style.cursor = 'pointer';
         cardHeader.onclick = (e) => {
-            if (e.target.closest('.card-header-actions') || e.target.closest('.edit-form')) return;
+            if (e.target.closest('.card-header-actions') || e.target.closest('.edit-form') || e.target.closest('.draggable-card-handle')) return;
             cardDiv.classList.toggle('card-collapsed');
         };
+
+        // NEW: Drag Handle for Card
+        const dragHandle = document.createElement('div');
+        dragHandle.className = 'draggable-card-handle';
+        dragHandle.style.cssText = "cursor: grab; margin-right: 10px; font-size: 1.2rem; color: #aaa;";
+        dragHandle.innerHTML = '⋮⋮';
 
         const cardInfo = document.createElement('div');
         cardInfo.className = 'card-header-info';
@@ -95,22 +131,21 @@ class UIRenderer {
         anniversary.setMinutes(anniversary.getMinutes() + anniversary.getTimezoneOffset());
         cardMeta.textContent = `Anniversary: ${anniversary.toLocaleDateString()}`;
         cardInfo.appendChild(cardMeta);
+
+        cardHeader.appendChild(dragHandle); // Add handle
         cardHeader.appendChild(cardInfo);
 
         // Actions
         const cardActions = document.createElement('div');
         cardActions.className = 'card-header-actions';
-
         const editBtn = document.createElement('button');
         editBtn.className = 'secondary-btn';
         editBtn.textContent = 'Edit';
         editBtn.onclick = () => this.renderCardEdit(card);
-
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'danger-btn';
         deleteBtn.textContent = 'Delete';
         deleteBtn.onclick = () => this.app.handleDeleteCard(card.id);
-
         cardActions.appendChild(editBtn);
         cardActions.appendChild(deleteBtn);
         cardHeader.appendChild(cardActions);
@@ -121,7 +156,17 @@ class UIRenderer {
 
         const benefitList = document.createElement('ul');
         benefitList.className = 'benefit-list';
-        // Empty list - App.js will populate
+        // Add data-card-id to UL for sortable identification
+        benefitList.dataset.cardId = card.id;
+
+        if (card.benefits.length > 0) {
+            card.benefits.forEach(benefit => {
+                benefitList.appendChild(this.createBenefitElement(benefit, card));
+            });
+        } else {
+            // Add a dummy item if empty so we can still drag *into* it (optional, requires min-height on ul)
+            benefitList.style.minHeight = '10px';
+        }
 
         // Add Benefit Form
         const addBenefitContainer = document.createElement('div');
@@ -161,10 +206,7 @@ class UIRenderer {
         const isAutoClaimed = this.app.isAutoClaimActive(benefit);
         const isIgnored = this.app.isIgnoredActive(benefit);
 
-        // Use passed state
         if (isCollapsed) li.classList.add('benefit-used');
-
-        // Add ignored class for styling if needed
         if (isIgnored) li.classList.add('benefit-ignored');
 
         // Details
@@ -172,23 +214,39 @@ class UIRenderer {
         detailsDiv.className = 'details';
         detailsDiv.style.cursor = 'pointer';
 
-        let titleHtml = `<span class="description">${benefit.description}</span>`;
-        if (isAutoClaimed) {
-            titleHtml += `<span class="auto-claim-badge">🔄 Auto-Claim</span>`;
-        }
-        if (isIgnored) {
-            titleHtml += `<span class="ignored-badge">🚫 Ignored</span>`;
-        }
+        // NEW: Drag Handle for Benefit
+        const dragHandle = document.createElement('span');
+        dragHandle.className = 'draggable-benefit-handle';
+        dragHandle.style.cssText = "cursor: grab; margin-right: 8px; color: #bbb; font-size: 1.1rem;";
+        dragHandle.innerHTML = '⋮⋮';
 
-        detailsDiv.innerHTML = `
-            <div>${titleHtml}</div>
-            <span class="status" style="color: ${isUsed ? 'var(--success)' : 'var(--danger)'}">
-                $${remaining.toFixed(2)} remaining
-            </span>
-        `;
+        let titleHtml = `<span class="description">${benefit.description}</span>`;
+        if (isAutoClaimed) titleHtml += `<span class="auto-claim-badge">🔄 Auto-Claim</span>`;
+        if (isIgnored) titleHtml += `<span class="ignored-badge">🚫 Ignored</span>`;
+
+        // Flex wrapper for title row
+        const titleRow = document.createElement('div');
+        titleRow.style.display = 'flex';
+        titleRow.style.alignItems = 'center';
+        titleRow.appendChild(dragHandle); // Add handle
+
+        // Need a span wrapper for title HTML to append it
+        const titleTextWrapper = document.createElement('span');
+        titleTextWrapper.innerHTML = titleHtml;
+        titleRow.appendChild(titleTextWrapper);
+
+        detailsDiv.appendChild(titleRow);
+
+        const statusSpan = document.createElement('span');
+        statusSpan.className = 'status';
+        statusSpan.style.color = isUsed ? 'var(--success)' : 'var(--danger)';
+        statusSpan.textContent = `$${remaining.toFixed(2)} remaining`;
+        detailsDiv.appendChild(statusSpan);
+
         detailsDiv.onclick = (e) => {
             if (e.target.closest('.edit-form')) return;
             if (e.target.closest('.smart-stepper-btn')) return;
+            if (e.target.closest('.draggable-benefit-handle')) return; // Don't toggle on handle click
             if (e.target.tagName === 'INPUT') return;
             li.classList.toggle('benefit-used');
         };
@@ -215,28 +273,24 @@ class UIRenderer {
             nextResetDiv.textContent = `One-time benefit`;
         }
 
-        // Controls
+        // Controls (Same as before)
         const controlsDiv = document.createElement('div');
         controlsDiv.className = 'benefit-controls';
-
         const updateLabel = document.createElement('label');
         updateLabel.textContent = 'Set used: $';
 
         const inputWrapper = document.createElement('div');
         inputWrapper.className = 'smart-input-wrapper';
-
         const decBtn = document.createElement('button');
         decBtn.className = 'smart-stepper-btn';
         decBtn.textContent = '−';
         decBtn.tabIndex = -1;
-
         const updateInput = document.createElement('input');
         updateInput.type = 'number';
         updateInput.value = benefit.usedAmount.toFixed(2);
         updateInput.min = "0";
         updateInput.max = benefit.totalAmount;
         updateInput.step = "0.01";
-
         const incBtn = document.createElement('button');
         incBtn.className = 'smart-stepper-btn';
         incBtn.textContent = '+';
@@ -247,26 +301,19 @@ class UIRenderer {
             if (benefit.totalAmount >= 10) return 1;
             return 0.01;
         };
-
         const handleSmartIncrement = (direction) => {
             const step = getSmartStep();
             let current = parseFloat(updateInput.value) || 0;
             let nextVal;
-
             if (direction === 'up') {
                 nextVal = (Math.floor(current / step) + 1) * step;
             } else {
-                if (current % step === 0) {
-                    nextVal = current - step;
-                } else {
-                    nextVal = Math.ceil(current / step) * step - step;
-                }
+                if (current % step === 0) nextVal = current - step;
+                else nextVal = Math.ceil(current / step) * step - step;
             }
-
             if (nextVal < 0) nextVal = 0;
             if (nextVal > benefit.totalAmount) nextVal = benefit.totalAmount;
             nextVal = parseFloat(nextVal.toFixed(2));
-
             updateInput.value = nextVal.toFixed(2);
             this.app.handleUpdateBenefitUsage(benefit.id, nextVal);
         };
@@ -279,7 +326,6 @@ class UIRenderer {
             e.stopPropagation();
             handleSmartIncrement('up');
         };
-
         updateInput.onfocus = (e) => {
             e.target.select();
         };
@@ -300,7 +346,6 @@ class UIRenderer {
         editBtn.className = 'secondary-btn';
         editBtn.textContent = 'Edit';
         editBtn.onclick = () => this.renderBenefitEdit(benefit, card);
-
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'danger-btn';
         deleteBtn.textContent = 'Delete';
@@ -308,7 +353,6 @@ class UIRenderer {
 
         rightControls.appendChild(editBtn);
         rightControls.appendChild(deleteBtn);
-
         controlsDiv.appendChild(updateLabel);
         controlsDiv.appendChild(inputWrapper);
         controlsDiv.appendChild(rightControls);
@@ -322,7 +366,7 @@ class UIRenderer {
         return li;
     }
 
-    // ... (createAddBenefitForm, renderCardEdit, renderBenefitEdit remain unchanged)
+    // ... (rest of methods: createAddBenefitForm, renderCardEdit, renderBenefitEdit remain unchanged) ...
     createAddBenefitForm(cardId) {
         const form = document.createElement('form');
         form.className = 'benefit-form';
@@ -364,6 +408,7 @@ class UIRenderer {
                 </div>
             </div>
             
+            <!-- Auto Claim Inputs -->
             <div class="form-row" id="auto-claim-row-${uId}" style="display:none; border-top:1px dashed #ccc; padding-top:10px;">
                 <div class="form-group" style="flex-direction:row; align-items:center; gap:10px; flex:0;">
                     <input type="checkbox" name="autoClaim" id="ac-check-${uId}" style="width:auto;">
@@ -375,6 +420,7 @@ class UIRenderer {
                 </div>
             </div>
 
+            <!-- Ignore Inputs -->
             <div class="form-row" id="ignore-row-${uId}" style="display:none; border-top:1px dashed #ccc; padding-top:10px;">
                 <div class="form-group" style="flex-direction:row; align-items:center; gap:10px; flex:0;">
                     <input type="checkbox" name="ignored" id="ig-check-${uId}" style="width:auto;">
@@ -551,6 +597,7 @@ class UIRenderer {
                 </div>
             </div>
 
+            <!-- Auto Claim Edit -->
             <div class="form-row" id="auto-claim-row-${uId}" style="display:${isRecurring ? 'flex' : 'none'}; border-top:1px dashed #ccc; padding-top:10px;">
                 <div class="form-group" style="flex-direction:row; align-items:center; gap:10px; flex:0;">
                     <input type="checkbox" id="ac-check-${uId}" style="width:auto;" ${hasAutoClaim ? 'checked' : ''}>
@@ -562,6 +609,7 @@ class UIRenderer {
                 </div>
             </div>
 
+            <!-- NEW: Ignore Edit -->
             <div class="form-row" id="ignore-row-${uId}" style="display:${isRecurring ? 'flex' : 'none'}; border-top:1px dashed #ccc; padding-top:10px;">
                 <div class="form-group" style="flex-direction:row; align-items:center; gap:10px; flex:0;">
                     <input type="checkbox" id="ig-check-${uId}" style="width:auto;" ${hasIgnored ? 'checked' : ''}>

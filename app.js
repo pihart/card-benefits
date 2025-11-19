@@ -14,8 +14,8 @@ class BenefitTrackerApp {
         this.pollInterval = 800;
 
         // Concurrency Control
-        this.pollAbortController = null; // Controller for the current in-flight poll
-        this.isSaving = false; // Lock to prevent polling while saving
+        this.pollAbortController = null;
+        this.isSaving = false;
 
         // Core References
         this.loadingIndicator = document.getElementById('loading-indicator');
@@ -41,7 +41,7 @@ class BenefitTrackerApp {
         this.addCardForm.addEventListener('submit', this.handleAddCard.bind(this));
         this.expiringDaysSelect.addEventListener('change', (e) => {
             this.expiringDays = parseInt(e.target.value, 10);
-            this.render();
+            this.render(); // Re-render entire view
         });
 
         this.showAddCardBtn.addEventListener('click', () => {
@@ -64,6 +64,7 @@ class BenefitTrackerApp {
         document.getElementById('use-local-storage-btn').onclick = this.handleSwitchToLocal.bind(this);
     }
 
+    // ... (init and initLiveSync unchanged) ...
     async init() {
         this.today.setHours(0, 0, 0, 0);
         this.expiringDays = parseInt(this.expiringDaysSelect.value, 10);
@@ -102,8 +103,6 @@ class BenefitTrackerApp {
         }
     }
 
-    // --- Live Sync Logic ---
-
     initLiveSync() {
         window.addEventListener('storage', (e) => {
             if (e.key === 'creditCardBenefitTracker') this.checkForUpdates();
@@ -114,19 +113,13 @@ class BenefitTrackerApp {
     }
 
     async checkForUpdates() {
-        // 1. Don't poll if user is typing
         if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
-
-        // 2. Don't poll if we are currently saving (prevent overwriting our own write)
         if (this.isSaving) return;
 
-        // 3. Create AbortController for this specific poll request
         this.pollAbortController = new AbortController();
 
         try {
             const remoteData = await this.storage.loadData({signal: this.pollAbortController.signal});
-
-            // If we are here, the request finished successfully (was not aborted)
             this.pollAbortController = null;
 
             if (JSON.stringify(this.cards) !== JSON.stringify(remoteData)) {
@@ -134,10 +127,7 @@ class BenefitTrackerApp {
                 this.render();
             }
         } catch (e) {
-            if (e.name === 'AbortError') {
-                // Request was cancelled intentionally by saveState()
-                console.log('Poll aborted due to user save action.');
-            } else {
+            if (e.name !== 'AbortError') {
                 console.warn('Background poll failed:', e.message);
             }
         }
@@ -148,15 +138,12 @@ class BenefitTrackerApp {
     }
 
     async saveState() {
-        // 1. Abort any pending polls immediately
         if (this.pollAbortController) {
             this.pollAbortController.abort();
             this.pollAbortController = null;
         }
 
-        // 2. Lock polling until save completes
         this.isSaving = true;
-
         this.toggleLoading(true);
         try {
             await this.storage.saveData(this.cards);
@@ -164,18 +151,14 @@ class BenefitTrackerApp {
             alert(`Save failed: ${e.message}`);
         } finally {
             this.toggleLoading(false);
-            // 3. Unlock polling
             this.isSaving = false;
         }
     }
-
-    // --- Benefit Logic Helpers ---
 
     isAutoClaimActive(benefit) {
         if (benefit.frequency === 'one-time') return false;
         if (benefit.autoClaim !== true) return false;
         if (!benefit.autoClaimEndDate) return false;
-
         const endDate = new Date(benefit.autoClaimEndDate);
         endDate.setHours(0, 0, 0, 0);
         return endDate >= this.today;
@@ -185,7 +168,6 @@ class BenefitTrackerApp {
         if (benefit.frequency === 'one-time') return false;
         if (benefit.ignored !== true) return false;
         if (!benefit.ignoredEndDate) return false;
-
         const endDate = new Date(benefit.ignoredEndDate);
         endDate.setHours(0, 0, 0, 0);
         return endDate >= this.today;
@@ -249,42 +231,103 @@ class BenefitTrackerApp {
         this.render();
     }
 
+    // --- NEW: Reordering Logic ---
+
+    initSortables() {
+        // 1. Sortable for Cards
+        new Sortable(this.cardListContainer, {
+            handle: '.draggable-card-handle',
+            animation: 150,
+            onEnd: (evt) => {
+                this.handleReorderCards(evt.oldIndex, evt.newIndex);
+            }
+        });
+
+        // 2. Sortable for Benefits within each Card
+        // We need to find all benefit lists (ULs) and make them sortable
+        const benefitLists = this.cardListContainer.querySelectorAll('.benefit-list');
+        benefitLists.forEach(list => {
+            new Sortable(list, {
+                handle: '.draggable-benefit-handle',
+                animation: 150,
+                // Prevent dragging benefits between different cards (optional, but safer)
+                group: list.dataset.cardId,
+                onEnd: (evt) => {
+                    const cardId = list.dataset.cardId;
+                    this.handleReorderBenefits(cardId, evt.oldIndex, evt.newIndex);
+                }
+            });
+        });
+    }
+
+    handleReorderCards(oldIndex, newIndex) {
+        if (oldIndex === newIndex) return;
+
+        // Remove from old index and insert at new
+        const [movedCard] = this.cards.splice(oldIndex, 1);
+        this.cards.splice(newIndex, 0, movedCard);
+
+        this.saveState();
+        // No need to re-render, SortableJS moved the DOM.
+        // But saving state ensures refresh works.
+    }
+
+    handleReorderBenefits(cardId, oldIndex, newIndex) {
+        if (oldIndex === newIndex) return;
+
+        const card = this.cards.find(c => c.id === cardId);
+        if (card) {
+            const [movedBenefit] = card.benefits.splice(oldIndex, 1);
+            card.benefits.splice(newIndex, 0, movedBenefit);
+            this.saveState();
+        }
+    }
+
     // --- Rendering Proxy ---
     render() {
         // 1. SNAPSHOT UI STATE
         const cardState = new Map();
         const benefitState = new Map();
         let ignoredSectionOpen = false;
+        let fullyUsedSectionOpen = false;
+        let mainWidgetOpen = true;
 
         this.cardListContainer.querySelectorAll('.card').forEach(el => {
             cardState.set(el.dataset.cardId, el.classList.contains('card-collapsed'));
         });
-
         this.cardListContainer.querySelectorAll('.benefit-item').forEach(el => {
             benefitState.set(el.dataset.benefitId, el.classList.contains('benefit-used'));
         });
 
+        const widgetDetails = document.querySelector('#expiring-soon-container details.expiring-widget-details');
+        if (widgetDetails) mainWidgetOpen = widgetDetails.hasAttribute('open');
+
         const ignoredDetails = document.querySelector('.ignored-section');
-        if (ignoredDetails && ignoredDetails.hasAttribute('open')) {
-            ignoredSectionOpen = true;
-        }
+        if (ignoredDetails && ignoredDetails.hasAttribute('open')) ignoredSectionOpen = true;
+
+        const fullyUsedDetails = document.querySelector('.fully-used-section');
+        if (fullyUsedDetails && fullyUsedDetails.hasAttribute('open')) fullyUsedSectionOpen = true;
 
         // 2. Calculate Data
         const expiringActive = [];
         const expiringIgnored = [];
+        const expiringFullyUsed = [];
+
         const limitDate = new Date(this.today.getTime());
         limitDate.setDate(this.today.getDate() + this.expiringDays);
 
         this.cards.forEach(card => {
             card.benefits.forEach(benefit => {
                 const rem = benefit.totalAmount - benefit.usedAmount;
-                if (rem <= 0 || benefit.frequency === 'one-time') return;
+                if (benefit.frequency === 'one-time') return;
 
                 const next = DateUtils.calculateNextResetDate(benefit, card, this.today);
 
                 if (next > this.today && next <= limitDate) {
                     const item = {cardName: card.name, benefit: benefit, remainingAmount: rem, nextResetDate: next};
-                    if (this.isIgnoredActive(benefit)) {
+                    if (rem <= 0) {
+                        expiringFullyUsed.push(item);
+                    } else if (this.isIgnoredActive(benefit)) {
                         expiringIgnored.push(item);
                     } else {
                         expiringActive.push(item);
@@ -296,24 +339,23 @@ class BenefitTrackerApp {
         const sortFn = (a, b) => b.remainingAmount - a.remainingAmount;
         expiringActive.sort(sortFn);
         expiringIgnored.sort(sortFn);
+        expiringFullyUsed.sort((a, b) => a.nextResetDate - b.nextResetDate);
 
-        // 3. Render UI
-        this.ui.renderExpiringSoon(expiringActive, expiringIgnored, this.expiringDays, ignoredSectionOpen);
+        // 3. Render Expiring
+        this.ui.renderExpiringSoon(expiringActive, expiringIgnored, expiringFullyUsed, this.expiringDays, mainWidgetOpen, ignoredSectionOpen, fullyUsedSectionOpen);
 
+        // 4. Render Cards
         this.cardListContainer.innerHTML = '';
         if (this.cards.length === 0) this.cardListContainer.innerHTML = '<p>No cards added yet.</p>';
 
         this.cards.forEach(card => {
             const allUsed = card.benefits.length > 0 && card.benefits.every(b => (b.totalAmount - b.usedAmount) <= 0);
-
             let isCardCollapsed = allUsed;
             if (cardState.has(card.id)) {
                 isCardCollapsed = cardState.get(card.id);
             }
 
             const cardEl = this.ui.createCardElement(card, isCardCollapsed);
-
-            // Inject Benefits with Restored State
             const benefitList = cardEl.querySelector('.benefit-list');
             benefitList.innerHTML = '';
 
@@ -321,7 +363,6 @@ class BenefitTrackerApp {
                 card.benefits.forEach(benefit => {
                     const isUsed = (benefit.totalAmount - benefit.usedAmount) <= 0;
                     const isIgnored = this.isIgnoredActive(benefit);
-
                     let isBenefitCollapsed = isUsed || isIgnored;
 
                     if (benefitState.has(benefit.id)) {
@@ -333,19 +374,19 @@ class BenefitTrackerApp {
             } else {
                 benefitList.innerHTML = '<li>No benefits added for this card yet.</li>';
             }
-
             this.cardListContainer.appendChild(cardEl);
         });
+
+        // --- NEW: Init Sortables after rendering ---
+        this.initSortables();
     }
 
-    // --- Handlers ---
-
+    // ... (Handlers same as before) ...
     handleAddCard(e) {
         e.preventDefault();
         const name = this.newCardNameInput.value.trim();
         const date = this.newCardAnniversaryInput.value;
         if (!name || !date) return;
-
         this.cards.push({
             id: `card-${Math.random().toString(36).substr(2, 9)}`,
             name: name,
@@ -376,7 +417,6 @@ class BenefitTrackerApp {
                 usedAmount: 0,
                 lastReset: this.today.toISOString()
             };
-
             if (this.isAutoClaimActive(newBenefit)) {
                 newBenefit.usedAmount = newBenefit.totalAmount;
             }
@@ -384,7 +424,6 @@ class BenefitTrackerApp {
                 newBenefit.ignored = false;
                 newBenefit.ignoredEndDate = null;
             }
-
             card.benefits.push(newBenefit);
             this.saveState();
             this.render();
@@ -399,6 +438,7 @@ class BenefitTrackerApp {
                 if (val > b.totalAmount) val = b.totalAmount;
                 b.usedAmount = val;
                 this.saveState();
+                // Note: render() re-inits sortables, which is fine.
                 this.render();
                 return;
             }
@@ -433,18 +473,15 @@ class BenefitTrackerApp {
             const b = c.benefits.find(ben => ben.id === bId);
             if (b) {
                 Object.assign(b, data);
-
                 if (b.autoClaim && b.ignored) {
                     b.ignored = false;
                     b.ignoredEndDate = null;
                 }
-
                 if (this.isAutoClaimActive(b)) {
                     b.usedAmount = b.totalAmount;
                 } else if (b.usedAmount > b.totalAmount) {
                     b.usedAmount = b.totalAmount;
                 }
-
                 this.saveState();
                 this.render();
                 return;
@@ -456,12 +493,10 @@ class BenefitTrackerApp {
         const url = this.s3UrlInput.value.trim();
         const interval = parseInt(this.pollIntervalInput.value) || 800;
         if (!url) return;
-
         const tempStore = new CloudStore(url);
         this.settingsSaveBtn.textContent = 'Testing...';
         this.settingsSaveBtn.disabled = true;
         this.toggleLoading(true);
-
         try {
             await tempStore.loadData();
             localStorage.setItem('creditCardBenefitTracker_config', url);

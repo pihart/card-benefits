@@ -1,3 +1,4 @@
+/* --- Header --- */
 header {
     background-color: var(--white);
     padding: 15px 40px;
@@ -43,7 +44,25 @@ main {
         grid-row: 1;
         position: sticky;
         top: calc(var(--header-height) + 20px);
-        height: fit-content;
+        max-height: calc(100vh - var(--header-height) - 40px);
+        overflow-y: auto; /* Enable independent scroll */
+
+        /* Custom scrollbar styling for sidebar */
+        scrollbar-width: thin;
+        scrollbar-color: var(--medium-gray) transparent;
+    }
+
+    aside::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    aside::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    aside::-webkit-scrollbar-thumb {
+        background-color: var(--medium-gray);
+        border-radius: 20px;
     }
 
     main {
