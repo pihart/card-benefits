@@ -1,7 +1,6 @@
 /**
  * Cloud Object Storage Implementation.
  * Uses simple GET and PUT requests to a pre-authenticated URL.
- * Works with OCI PARs, AWS S3 Presigned URLs, Azure SAS, etc.
  */
 class CloudStore extends StorageInterface {
     constructor(url) {
@@ -9,14 +8,18 @@ class CloudStore extends StorageInterface {
         this.url = url;
     }
 
-    async loadData() {
+    /**
+     * @param {Object} options - { signal: AbortSignal }
+     */
+    async loadData(options = {}) {
         try {
             // timestamp prevents caching on some aggressive browsers/proxies
             const fetchUrl = `${this.url}${this.url.includes('?') ? '&' : '?'}t=${new Date().getTime()}`;
 
             const response = await fetch(fetchUrl, {
                 method: 'GET',
-                cache: 'no-store'
+                cache: 'no-store',
+                signal: options.signal // Pass the abort signal to fetch
             });
 
             if (response.status === 404) {
@@ -31,8 +34,8 @@ class CloudStore extends StorageInterface {
             const data = await response.json();
             return Array.isArray(data) ? data : [];
         } catch (error) {
-            // We throw the error so the app can decide to alert (user action) or log (background poll)
-            throw new Error(`Cloud Load Error: ${error.message}`);
+            // Rethrow so App can handle AbortError specifically
+            throw error;
         }
     }
 

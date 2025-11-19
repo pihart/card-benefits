@@ -13,6 +13,10 @@ class BenefitTrackerApp {
         this.expiringDays = 30;
         this.pollInterval = 800;
 
+        // Concurrency Control
+        this.pollAbortController = null; // Controller for the current in-flight poll
+        this.isSaving = false; // Lock to prevent polling while saving
+
         // Core References
         this.loadingIndicator = document.getElementById('loading-indicator');
         this.cardListContainer = document.getElementById('card-list-container');
@@ -37,7 +41,7 @@ class BenefitTrackerApp {
         this.addCardForm.addEventListener('submit', this.handleAddCard.bind(this));
         this.expiringDaysSelect.addEventListener('change', (e) => {
             this.expiringDays = parseInt(e.target.value, 10);
-            this.render(); // Re-render entire view
+            this.render();
         });
 
         this.showAddCardBtn.addEventListener('click', () => {
@@ -82,7 +86,7 @@ class BenefitTrackerApp {
             this.cards = await this.storage.loadData();
         } catch (e) {
             console.error(e);
-            alert("Error loading data.");
+            alert("Error loading data. Please check settings.");
         } finally {
             this.toggleLoading(false);
         }
@@ -98,7 +102,7 @@ class BenefitTrackerApp {
         }
     }
 
-    // --- Logic ---
+    // --- Live Sync Logic ---
 
     initLiveSync() {
         window.addEventListener('storage', (e) => {
@@ -110,14 +114,32 @@ class BenefitTrackerApp {
     }
 
     async checkForUpdates() {
+        // 1. Don't poll if user is typing
         if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+
+        // 2. Don't poll if we are currently saving (prevent overwriting our own write)
+        if (this.isSaving) return;
+
+        // 3. Create AbortController for this specific poll request
+        this.pollAbortController = new AbortController();
+
         try {
-            const remoteData = await this.storage.loadData();
+            const remoteData = await this.storage.loadData({signal: this.pollAbortController.signal});
+
+            // If we are here, the request finished successfully (was not aborted)
+            this.pollAbortController = null;
+
             if (JSON.stringify(this.cards) !== JSON.stringify(remoteData)) {
                 this.cards = remoteData;
                 this.render();
             }
-        } catch (e) { /* Silent fail on poll */
+        } catch (e) {
+            if (e.name === 'AbortError') {
+                // Request was cancelled intentionally by saveState()
+                console.log('Poll aborted due to user save action.');
+            } else {
+                console.warn('Background poll failed:', e.message);
+            }
         }
     }
 
@@ -126,6 +148,15 @@ class BenefitTrackerApp {
     }
 
     async saveState() {
+        // 1. Abort any pending polls immediately
+        if (this.pollAbortController) {
+            this.pollAbortController.abort();
+            this.pollAbortController = null;
+        }
+
+        // 2. Lock polling until save completes
+        this.isSaving = true;
+
         this.toggleLoading(true);
         try {
             await this.storage.saveData(this.cards);
@@ -133,8 +164,12 @@ class BenefitTrackerApp {
             alert(`Save failed: ${e.message}`);
         } finally {
             this.toggleLoading(false);
+            // 3. Unlock polling
+            this.isSaving = false;
         }
     }
+
+    // --- Benefit Logic Helpers ---
 
     isAutoClaimActive(benefit) {
         if (benefit.frequency === 'one-time') return false;
@@ -164,13 +199,11 @@ class BenefitTrackerApp {
             card.benefits.forEach(benefit => {
                 if (benefit.frequency === 'one-time') return;
 
-                // 1. Enforce Auto-Claim immediately
                 if (this.isAutoClaimActive(benefit) && benefit.usedAmount < benefit.totalAmount) {
                     benefit.usedAmount = benefit.totalAmount;
                     stateChanged = true;
                 }
 
-                // 2. Check for Resets
                 const nextReset = DateUtils.calculateNextResetDate(benefit, card, this.today);
 
                 if (nextReset <= this.today) {
@@ -220,21 +253,17 @@ class BenefitTrackerApp {
     render() {
         // 1. SNAPSHOT UI STATE
         const cardState = new Map();
-        const benefitState = new Map(); // Stores true if collapsed (has .benefit-used), false if expanded
+        const benefitState = new Map();
         let ignoredSectionOpen = false;
 
-        // Snapshot Cards
         this.cardListContainer.querySelectorAll('.card').forEach(el => {
             cardState.set(el.dataset.cardId, el.classList.contains('card-collapsed'));
         });
 
-        // Snapshot Benefits (inside cards)
         this.cardListContainer.querySelectorAll('.benefit-item').forEach(el => {
-            // If it has 'benefit-used', it is visually collapsed.
             benefitState.set(el.dataset.benefitId, el.classList.contains('benefit-used'));
         });
 
-        // Snapshot Expiring Ignored Section
         const ignoredDetails = document.querySelector('.ignored-section');
         if (ignoredDetails && ignoredDetails.hasAttribute('open')) {
             ignoredSectionOpen = true;
@@ -268,40 +297,33 @@ class BenefitTrackerApp {
         expiringActive.sort(sortFn);
         expiringIgnored.sort(sortFn);
 
-        // 3. Render Expiring Section (Pass ignored section state)
+        // 3. Render UI
         this.ui.renderExpiringSoon(expiringActive, expiringIgnored, this.expiringDays, ignoredSectionOpen);
 
-        // 4. Render Cards
         this.cardListContainer.innerHTML = '';
         if (this.cards.length === 0) this.cardListContainer.innerHTML = '<p>No cards added yet.</p>';
 
         this.cards.forEach(card => {
-            // Default Card State: Collapse if all used
             const allUsed = card.benefits.length > 0 && card.benefits.every(b => (b.totalAmount - b.usedAmount) <= 0);
-            let isCardCollapsed = allUsed;
 
-            // Restore Card State
+            let isCardCollapsed = allUsed;
             if (cardState.has(card.id)) {
                 isCardCollapsed = cardState.get(card.id);
             }
 
-            // Generate Card Element
             const cardEl = this.ui.createCardElement(card, isCardCollapsed);
 
-            // 5. Inject Benefits with Restored State
+            // Inject Benefits with Restored State
             const benefitList = cardEl.querySelector('.benefit-list');
-            benefitList.innerHTML = ''; // Clear default placeholder if any
+            benefitList.innerHTML = '';
 
             if (card.benefits.length > 0) {
                 card.benefits.forEach(benefit => {
-                    // Determine Benefit State
                     const isUsed = (benefit.totalAmount - benefit.usedAmount) <= 0;
                     const isIgnored = this.isIgnoredActive(benefit);
 
-                    // Default: Collapsed if used or ignored
                     let isBenefitCollapsed = isUsed || isIgnored;
 
-                    // Restore: If we have a previous state, use that
                     if (benefitState.has(benefit.id)) {
                         isBenefitCollapsed = benefitState.get(benefit.id);
                     }
@@ -355,7 +377,6 @@ class BenefitTrackerApp {
                 lastReset: this.today.toISOString()
             };
 
-            // Enforce AC immediately on creation
             if (this.isAutoClaimActive(newBenefit)) {
                 newBenefit.usedAmount = newBenefit.totalAmount;
             }
@@ -439,6 +460,7 @@ class BenefitTrackerApp {
         const tempStore = new CloudStore(url);
         this.settingsSaveBtn.textContent = 'Testing...';
         this.settingsSaveBtn.disabled = true;
+        this.toggleLoading(true);
 
         try {
             await tempStore.loadData();
@@ -450,6 +472,7 @@ class BenefitTrackerApp {
         } finally {
             this.settingsSaveBtn.textContent = 'Save & Connect';
             this.settingsSaveBtn.disabled = false;
+            this.toggleLoading(false);
         }
     }
 
