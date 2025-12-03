@@ -245,7 +245,13 @@ class UIRenderer {
             const nextResetDate = DateUtils.calculateNextResetDate(benefit, card, this.app.today);
             nextResetDiv.textContent = `Resets on: ${nextResetDate.toLocaleDateString()}`;
         } else {
-            nextResetDiv.textContent = `One-time benefit`;
+            if (benefit.expiryDate) {
+                const expiryDate = new Date(benefit.expiryDate);
+                expiryDate.setMinutes(expiryDate.getMinutes() + expiryDate.getTimezoneOffset());
+                nextResetDiv.textContent = `Expires on: ${expiryDate.toLocaleDateString()}`;
+            } else {
+                nextResetDiv.textContent = `One-time benefit`;
+            }
         }
 
         // Controls (Same as before)
@@ -407,6 +413,14 @@ class UIRenderer {
                 </div>
             </div>
 
+            <!-- Expiry Date for One-Time Benefits -->
+            <div class="form-row" id="expiry-row-${uId}" style="display:none; border-top:1px dashed #ccc; padding-top:10px;">
+                <div class="form-group">
+                    <label>Expiry Date</label>
+                    <input type="date" name="expiryDate" id="expiry-date-${uId}">
+                </div>
+            </div>
+
             <button type="submit">Add Benefit</button>
         `;
 
@@ -422,6 +436,8 @@ class UIRenderer {
         const igCheck = form.querySelector(`#ig-check-${uId}`);
         const igDateGroup = form.querySelector(`#ig-date-group-${uId}`);
 
+        const expiryRow = form.querySelector(`#expiry-row-${uId}`);
+
         freqSelect.onchange = (e) => {
             const isOneTime = e.target.value === 'one-time';
             if (isOneTime) {
@@ -429,11 +445,13 @@ class UIRenderer {
                 resetSelect.required = false;
                 acRow.style.display = 'none';
                 igRow.style.display = 'none';
+                expiryRow.style.display = 'flex';
             } else {
                 resetGroup.style.display = 'block';
                 resetSelect.required = true;
                 acRow.style.display = 'flex';
                 igRow.style.display = 'flex';
+                expiryRow.style.display = 'none';
             }
         };
 
@@ -468,7 +486,8 @@ class UIRenderer {
                 autoClaim: formData.get('autoClaim') === 'on',
                 autoClaimEndDate: formData.get('autoClaimEndDate') || null,
                 ignored: formData.get('ignored') === 'on',
-                ignoredEndDate: formData.get('ignoredEndDate') || null
+                ignoredEndDate: formData.get('ignoredEndDate') || null,
+                expiryDate: formData.get('frequency') === 'one-time' ? (formData.get('expiryDate') || null) : null
             };
             this.app.handleAddBenefit(cardId, benefitData);
             e.target.reset();
@@ -477,6 +496,7 @@ class UIRenderer {
             acDateGroup.style.display = 'none';
             igRow.style.display = 'none';
             igDateGroup.style.display = 'none';
+            expiryRow.style.display = 'none';
             form.style.display = 'none';
             form.previousElementSibling.style.display = 'block';
         };
@@ -596,6 +616,14 @@ class UIRenderer {
                 </div>
             </div>
 
+            <!-- Expiry Date for One-Time Benefits -->
+            <div class="form-row" id="expiry-row-${uId}" style="display:${!isRecurring ? 'flex' : 'none'}; border-top:1px dashed #ccc; padding-top:10px;">
+                <div class="form-group">
+                    <label>Expiry Date</label>
+                    <input type="date" id="expiry-date-${uId}" value="${benefit.expiryDate || ''}">
+                </div>
+            </div>
+
             <div class="form-row" style="justify-content: flex-end;">
                 <button class="secondary-btn" id="cancel-${uId}">Cancel</button>
                 <button id="save-${uId}">Save Changes</button>
@@ -618,17 +646,22 @@ class UIRenderer {
         const igDateGroup = document.getElementById(`ig-date-group-${uId}`);
         const igDateInput = document.getElementById(`ig-date-${uId}`);
 
+        const expiryRow = document.getElementById(`expiry-row-${uId}`);
+        const expiryDateInput = document.getElementById(`expiry-date-${uId}`);
+
         freqSelect.onchange = (e) => {
             if (e.target.value === 'one-time') {
                 resetGroup.style.display = 'none';
                 resetSelect.required = false;
                 acRow.style.display = 'none';
                 igRow.style.display = 'none';
+                expiryRow.style.display = 'flex';
             } else {
                 resetGroup.style.display = 'block';
                 resetSelect.required = true;
                 acRow.style.display = 'flex';
                 igRow.style.display = 'flex';
+                expiryRow.style.display = 'none';
             }
         };
 
@@ -661,7 +694,8 @@ class UIRenderer {
                 autoClaim: acCheck.checked,
                 autoClaimEndDate: acCheck.checked ? acDateInput.value : null,
                 ignored: igCheck.checked,
-                ignoredEndDate: igCheck.checked ? igDateInput.value : null
+                ignoredEndDate: igCheck.checked ? igDateInput.value : null,
+                expiryDate: freqSelect.value === 'one-time' ? (expiryDateInput.value || null) : null
             };
             if (newData.frequency !== 'one-time') {
                 newData.resetType = resetSelect.value;
