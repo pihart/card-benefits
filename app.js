@@ -226,7 +226,7 @@ class BenefitTrackerApp {
                     // Check if the carryover benefit has expired
                     if (benefit.earnedDate) {
                         const expiryDate = DateUtils.calculateCarryoverExpiryDate(benefit.earnedDate);
-                        if (this.today > expiryDate) {
+                        if (this.today.getTime() > expiryDate.getTime()) {
                             // Benefit has expired - reset the credit
                             benefit.usedAmount = 0;
                             benefit.earnedDate = null;

@@ -281,7 +281,11 @@ class UIRenderer {
         if (isCarryover) {
             if (isCarryoverEarned) {
                 const expiryDate = this.app.getCarryoverExpiryDate(benefit);
-                nextResetDiv.textContent = `Credit expires: ${expiryDate.toLocaleDateString()}`;
+                if (expiryDate) {
+                    nextResetDiv.textContent = `Credit expires: ${expiryDate.toLocaleDateString()}`;
+                } else {
+                    nextResetDiv.textContent = `Carryover benefit (earned)`;
+                }
             } else {
                 const earnDeadline = DateUtils.calculateCarryoverEarnDeadline(benefit, this.app.today);
                 nextResetDiv.textContent = `Earn by: ${earnDeadline.toLocaleDateString()} (end of year)`;
@@ -874,6 +878,7 @@ class UIRenderer {
             const frequency = freqSelect.value;
             const isCarryoverSelected = frequency === 'carryover';
             
+            const earnThresholdValue = parseFloat(earnThresholdInput.value);
             const newData = {
                 description: document.getElementById(`desc-${uId}`).value.trim(),
                 totalAmount: parseFloat(document.getElementById(`amt-${uId}`).value),
@@ -886,7 +891,7 @@ class UIRenderer {
                 expiryDate: frequency === 'one-time' ? (expiryDateInput.value || null) : null,
                 // Carryover-specific fields
                 isCarryover: isCarryoverSelected,
-                earnThreshold: isCarryoverSelected ? parseFloat(earnThresholdInput.value) : null
+                earnThreshold: isCarryoverSelected ? (isNaN(earnThresholdValue) ? 0 : earnThresholdValue) : null
             };
             
             // Preserve existing carryover state if still a carryover benefit
