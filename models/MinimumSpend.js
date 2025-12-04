@@ -26,7 +26,7 @@ class MinimumSpend {
         this.currentAmount = data.currentAmount || 0;
         this.frequency = data.frequency;
         this.resetType = data.resetType || null;
-        this.deadline = data.deadline || null;
+        this.deadline = data.deadline ? new Date(data.deadline) : null;
         this.lastReset = data.lastReset || null;
         this.isMet = data.isMet || false;
         this.metDate = data.metDate || null;
@@ -36,14 +36,13 @@ class MinimumSpend {
         // Store anniversary date for cycle calculations
         this._anniversaryDate = anniversaryDate;
 
-        // Create the cycle instance
-        this._cycle = new MinimumSpendCycle({
-            frequency: this.frequency,
-            resetType: this.resetType,
-            deadline: this.deadline,
-            lastReset: this.lastReset,
-            anniversaryDate: this._anniversaryDate
-        });
+        // Normalize deadline
+        if (this.deadline) {
+            this.deadline.setHours(0, 0, 0, 0);
+        }
+
+        // Create the cycle instance using ExpiryCycle
+        this._syncCycle();
     }
 
     /**
@@ -60,10 +59,9 @@ class MinimumSpend {
      * @private
      */
     _syncCycle() {
-        this._cycle = new MinimumSpendCycle({
+        this._cycle = new ExpiryCycle({
             frequency: this.frequency,
             resetType: this.resetType,
-            deadline: this.deadline,
             lastReset: this.lastReset,
             anniversaryDate: this._anniversaryDate
         });
@@ -137,7 +135,7 @@ class MinimumSpend {
     isExpired(currentDate) {
         if (this.isMet) return false;
         this._syncCycle();
-        return this._cycle.isExpired(currentDate);
+        return this._cycle.isDeadlinePassed(currentDate, this.deadline);
     }
 
     /**
@@ -158,7 +156,7 @@ class MinimumSpend {
      */
     getDeadline(currentDate) {
         this._syncCycle();
-        return this._cycle.getDeadline(currentDate);
+        return this._cycle.getDeadline(currentDate, this.deadline);
     }
 
     /**
@@ -168,7 +166,7 @@ class MinimumSpend {
      */
     daysUntilDeadline(currentDate) {
         this._syncCycle();
-        return this._cycle.daysUntilDeadline(currentDate);
+        return this._cycle.daysUntilDeadline(currentDate, this.deadline);
     }
 
     /**
@@ -179,7 +177,7 @@ class MinimumSpend {
      */
     deadlineWithin(currentDate, days) {
         this._syncCycle();
-        return this._cycle.deadlineWithin(currentDate, days);
+        return this._cycle.deadlineWithin(currentDate, days, this.deadline);
     }
 
     // ==================== RESET METHODS ====================
@@ -190,8 +188,9 @@ class MinimumSpend {
      * @returns {boolean}
      */
     shouldReset(currentDate) {
+        if (this.isOneTime()) return false;
         this._syncCycle();
-        return this._cycle.shouldReset(currentDate);
+        return this._cycle.isExpired(currentDate);
     }
 
     /**
@@ -253,6 +252,10 @@ class MinimumSpend {
      */
     update(data) {
         Object.assign(this, data);
+        if (data.deadline) {
+            this.deadline = new Date(data.deadline);
+            this.deadline.setHours(0, 0, 0, 0);
+        }
         this._syncCycle();
     }
 
@@ -270,7 +273,7 @@ class MinimumSpend {
             currentAmount: this.currentAmount,
             frequency: this.frequency,
             resetType: this.resetType,
-            deadline: this.deadline,
+            deadline: this.deadline ? this.deadline.toISOString() : null,
             lastReset: this.lastReset,
             isMet: this.isMet,
             metDate: this.metDate,

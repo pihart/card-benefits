@@ -311,6 +311,16 @@ class BenefitTrackerApp {
         let stateChanged = false;
 
         this.cards.forEach(card => {
+            // Reset recurring minimum spends if needed
+            if (card.minimumSpends) {
+                card.minimumSpends.forEach(minSpend => {
+                    if (minSpend.shouldReset && minSpend.shouldReset(this.today)) {
+                        minSpend.reset(this.today);
+                        stateChanged = true;
+                    }
+                });
+            }
+
             card.benefits.forEach(benefit => {
                 // Handle carryover benefits separately
                 if (this._isCarryoverBenefit(benefit)) {
@@ -330,14 +340,12 @@ class BenefitTrackerApp {
                         benefit.earnedInstances = [];
                     }
 
-                    // Check if earn progress resets (new calendar year)
+                    // Update lastEarnReset for calendar year tracking
                     const resetDate = CarryoverCycle.getResetDate(this.today);
                     const lastEarnReset = benefit.lastEarnReset ? new Date(benefit.lastEarnReset) : null;
                     
                     if (!lastEarnReset || lastEarnReset < resetDate) {
-                        // New calendar year - reset earn progress
                         benefit.lastEarnReset = resetDate.toISOString();
-                        benefit.earnProgress = 0;
                         stateChanged = true;
                     }
 
@@ -678,7 +686,6 @@ class BenefitTrackerApp {
             
             // Handle carryover benefits
             if (benefitData.isCarryover) {
-                benefitData.earnProgress = benefitData.earnProgress || 0;
                 benefitData.earnedInstances = []; // Use new array format
                 benefitData.lastEarnReset = CarryoverCycle.getResetDate(this.today).toISOString();
             }
@@ -718,45 +725,6 @@ class BenefitTrackerApp {
                 }
                 this.saveState();
                 // Note: render() re-inits sortables, which is fine.
-                this.render();
-                return;
-            }
-        }
-    }
-
-    /**
-     * Updates the earn progress for a carryover benefit.
-     * When progress reaches the threshold, a new earned instance is created.
-     * @param {string} bId - The benefit ID
-     * @param {number} val - The new earn progress value
-     */
-    handleUpdateEarnProgress(bId, val) {
-        for (const c of this.cards) {
-            const b = c.findBenefit ? c.findBenefit(bId) : c.benefits.find(ben => ben.id === bId);
-            if (b && this._isCarryoverBenefit(b)) {
-                // Use Benefit method if available
-                if (b.setEarnProgress) {
-                    b.setEarnProgress(val, this.today);
-                } else {
-                    if (isNaN(val) || val < 0) val = 0;
-                    b.earnProgress = val;
-                    
-                    // Initialize earnedInstances if needed
-                    if (!b.earnedInstances) {
-                        b.earnedInstances = [];
-                    }
-                    
-                    // Check if threshold is met and not already earned this year
-                    if (val >= b.earnThreshold && this.canEarnCarryoverThisYear(b)) {
-                        // Add new earned instance
-                        b.earnedInstances.push({
-                            earnedDate: this.today.toISOString(),
-                            usedAmount: 0
-                        });
-                    }
-                }
-                
-                this.saveState();
                 this.render();
                 return;
             }
@@ -916,6 +884,7 @@ class BenefitTrackerApp {
 
     /**
      * Updates the current spend amount for a minimum spend.
+     * When a minimum spend is met, any linked carryover benefits will earn an instance.
      * @param {string} minSpendId - The minimum spend ID
      * @param {number} val - The new current amount
      */
@@ -924,6 +893,8 @@ class BenefitTrackerApp {
             const ms = c.findMinimumSpend ? c.findMinimumSpend(minSpendId) : 
                 (c.minimumSpends || []).find(m => m.id === minSpendId);
             if (ms) {
+                const wasMetBefore = ms.isMet;
+                
                 if (ms.setCurrentAmount) {
                     ms.setCurrentAmount(val, this.today);
                 } else {
@@ -937,6 +908,25 @@ class BenefitTrackerApp {
                         ms.metDate = null;
                     }
                 }
+                
+                // If minimum spend just became met, check for linked carryover benefits
+                if (!wasMetBefore && ms.isMet) {
+                    c.benefits.forEach(benefit => {
+                        if (benefit.requiredMinimumSpendId === minSpendId && 
+                            this._isCarryoverBenefit(benefit) &&
+                            this.canEarnCarryoverThisYear(benefit)) {
+                            // Earn a new carryover instance
+                            if (!benefit.earnedInstances) {
+                                benefit.earnedInstances = [];
+                            }
+                            benefit.earnedInstances.push({
+                                earnedDate: this.today.toISOString(),
+                                usedAmount: 0
+                            });
+                        }
+                    });
+                }
+                
                 this.saveState();
                 this.render();
                 return;
