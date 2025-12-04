@@ -175,32 +175,59 @@ class BenefitTrackerApp {
     }
 
     /**
-     * Checks if a carryover benefit has been earned.
+     * Checks if a carryover benefit has any earned instances available.
      * @param {Object} benefit - The benefit object
-     * @returns {boolean} True if the benefit has been earned (earnProgress >= earnThreshold)
+     * @returns {boolean} True if the benefit has at least one active earned instance
      */
     isCarryoverEarned(benefit) {
         if (!benefit.isCarryover) return false;
-        return benefit.earnedDate != null;
+        return DateUtils.hasActiveCarryoverInstance(benefit, this.today);
     }
 
     /**
-     * Checks if a carryover benefit is available for use (earned and not expired).
+     * Checks if a carryover benefit can be earned in the current year.
      * @param {Object} benefit - The benefit object
-     * @returns {boolean} True if the benefit is earned and still active
+     * @returns {boolean} True if the benefit can still be earned this year
      */
-    isCarryoverActive(benefit) {
-        return DateUtils.isCarryoverActive(benefit, this.today);
+    canEarnCarryoverThisYear(benefit) {
+        return DateUtils.canEarnCarryoverThisYear(benefit, this.today);
     }
 
     /**
-     * Gets the expiry date for a carryover benefit.
+     * Gets all active (non-expired) earned instances for a carryover benefit.
      * @param {Object} benefit - The benefit object
-     * @returns {Date|null} The expiry date or null if not earned
+     * @returns {Array} Array of active earned instances
+     */
+    getActiveCarryoverInstances(benefit) {
+        return DateUtils.getActiveCarryoverInstances(benefit, this.today);
+    }
+
+    /**
+     * Gets the total remaining credit across all active earned instances.
+     * @param {Object} benefit - The benefit object
+     * @returns {number} Total remaining credit
+     */
+    getTotalCarryoverRemaining(benefit) {
+        return DateUtils.getTotalCarryoverRemaining(benefit, this.today);
+    }
+
+    /**
+     * Gets the expiry date for the earliest expiring active instance.
+     * @param {Object} benefit - The benefit object
+     * @returns {Date|null} The earliest expiry date or null if no active instances
      */
     getCarryoverExpiryDate(benefit) {
-        if (!benefit.isCarryover || !benefit.earnedDate) return null;
-        return DateUtils.calculateCarryoverExpiryDate(benefit.earnedDate);
+        if (!benefit.isCarryover) return null;
+        const activeInstances = this.getActiveCarryoverInstances(benefit);
+        if (activeInstances.length === 0) return null;
+        
+        // Return the earliest expiry date
+        const expiryDates = activeInstances.map(instance => 
+            DateUtils.calculateCarryoverExpiryDate(instance.earnedDate)
+        );
+        return expiryDates.reduce((earliest, date) => 
+            date < earliest ? date : earliest
+        );
     }
 
     checkAndResetBenefits() {
@@ -211,28 +238,44 @@ class BenefitTrackerApp {
             card.benefits.forEach(benefit => {
                 // Handle carryover benefits separately
                 if (benefit.isCarryover) {
+                    // Migrate legacy single earnedDate to earnedInstances array
+                    if (benefit.earnedDate && !benefit.earnedInstances) {
+                        benefit.earnedInstances = [{
+                            earnedDate: benefit.earnedDate,
+                            usedAmount: benefit.usedAmount || 0
+                        }];
+                        benefit.earnedDate = null; // Clear legacy field
+                        benefit.usedAmount = 0;
+                        stateChanged = true;
+                    }
+
+                    // Initialize earnedInstances if not present
+                    if (!benefit.earnedInstances) {
+                        benefit.earnedInstances = [];
+                    }
+
                     // Check if earn progress resets (new calendar year)
                     const resetDate = DateUtils.getCarryoverResetDate(this.today);
                     const lastEarnReset = benefit.lastEarnReset ? new Date(benefit.lastEarnReset) : null;
                     
                     if (!lastEarnReset || lastEarnReset < resetDate) {
-                        // New calendar year - reset earn progress but keep earned credits active
+                        // New calendar year - reset earn progress
                         benefit.lastEarnReset = resetDate.toISOString();
                         benefit.earnProgress = 0;
-                        // Don't reset earnedDate - the credit is still valid until expiry
                         stateChanged = true;
                     }
 
-                    // Check if the carryover benefit has expired
-                    if (benefit.earnedDate) {
-                        const expiryDate = DateUtils.calculateCarryoverExpiryDate(benefit.earnedDate);
-                        if (this.today.getTime() > expiryDate.getTime()) {
-                            // Benefit has expired - reset the credit
-                            benefit.usedAmount = 0;
-                            benefit.earnedDate = null;
-                            stateChanged = true;
-                        }
+                    // Remove expired instances
+                    const activeInstances = benefit.earnedInstances.filter(instance => {
+                        const expiryDate = DateUtils.calculateCarryoverExpiryDate(instance.earnedDate);
+                        return this.today.getTime() <= expiryDate.getTime();
+                    });
+                    
+                    if (activeInstances.length !== benefit.earnedInstances.length) {
+                        benefit.earnedInstances = activeInstances;
+                        stateChanged = true;
                     }
+
                     return; // Don't process as regular benefit
                 }
 
@@ -375,17 +418,24 @@ class BenefitTrackerApp {
 
         this.cards.forEach(card => {
             card.benefits.forEach(benefit => {
-                const rem = benefit.totalAmount - benefit.usedAmount;
-                
-                // Handle carryover benefits separately
+                // Handle carryover benefits separately - each earned instance can expire
                 if (benefit.isCarryover) {
-                    // Only show in expiring list if earned and the expiry is coming up
-                    if (benefit.earnedDate) {
-                        const expiryDate = this.getCarryoverExpiryDate(benefit);
-                        // Key requirement: benefits earned this year expire end of NEXT year
-                        // So we check if the expiry date is within the limit
+                    const activeInstances = this.getActiveCarryoverInstances(benefit);
+                    activeInstances.forEach((instance, index) => {
+                        const expiryDate = DateUtils.calculateCarryoverExpiryDate(instance.earnedDate);
+                        const rem = benefit.totalAmount - (instance.usedAmount || 0);
+                        
+                        // Only show in expiring list if the expiry is within the limit
                         if (expiryDate > this.today && expiryDate <= limitDate) {
-                            const item = {cardName: card.name, benefit: benefit, remainingAmount: rem, nextResetDate: expiryDate};
+                            const earnYear = DateUtils.getEarnYear(instance.earnedDate);
+                            const item = {
+                                cardName: card.name, 
+                                benefit: benefit, 
+                                remainingAmount: rem, 
+                                nextResetDate: expiryDate,
+                                instanceIndex: index,
+                                earnYear: earnYear
+                            };
                             if (rem <= 0) {
                                 expiringFullyUsed.push(item);
                             } else if (this.isIgnoredActive(benefit)) {
@@ -394,10 +444,11 @@ class BenefitTrackerApp {
                                 expiringActive.push(item);
                             }
                         }
-                    }
+                    });
                     return; // Don't process as regular benefit
                 }
 
+                const rem = benefit.totalAmount - benefit.usedAmount;
                 if (benefit.frequency === 'one-time') return;
 
                 const next = DateUtils.calculateNextResetDate(benefit, card, this.today);
@@ -499,7 +550,7 @@ class BenefitTrackerApp {
             // Handle carryover benefits
             if (newBenefit.isCarryover) {
                 newBenefit.earnProgress = newBenefit.earnProgress || 0;
-                newBenefit.earnedDate = null;
+                newBenefit.earnedInstances = []; // Use new array format
                 newBenefit.lastEarnReset = DateUtils.getCarryoverResetDate(this.today).toISOString();
             }
             
@@ -533,7 +584,7 @@ class BenefitTrackerApp {
 
     /**
      * Updates the earn progress for a carryover benefit.
-     * When progress reaches the threshold, the benefit is marked as earned.
+     * When progress reaches the threshold, a new earned instance is created.
      * @param {string} bId - The benefit ID
      * @param {number} val - The new earn progress value
      */
@@ -544,11 +595,40 @@ class BenefitTrackerApp {
                 if (isNaN(val) || val < 0) val = 0;
                 b.earnProgress = val;
                 
-                // Check if threshold is met and not already earned this year
-                if (val >= b.earnThreshold && !b.earnedDate) {
-                    b.earnedDate = this.today.toISOString();
+                // Initialize earnedInstances if needed
+                if (!b.earnedInstances) {
+                    b.earnedInstances = [];
                 }
                 
+                // Check if threshold is met and not already earned this year
+                if (val >= b.earnThreshold && this.canEarnCarryoverThisYear(b)) {
+                    // Add new earned instance
+                    b.earnedInstances.push({
+                        earnedDate: this.today.toISOString(),
+                        usedAmount: 0
+                    });
+                }
+                
+                this.saveState();
+                this.render();
+                return;
+            }
+        }
+    }
+
+    /**
+     * Updates the usage for a specific carryover earned instance.
+     * @param {string} bId - The benefit ID
+     * @param {number} instanceIndex - The index of the earned instance
+     * @param {number} val - The new used amount value
+     */
+    handleUpdateCarryoverInstanceUsage(bId, instanceIndex, val) {
+        for (const c of this.cards) {
+            const b = c.benefits.find(ben => ben.id === bId);
+            if (b && b.isCarryover && b.earnedInstances && b.earnedInstances[instanceIndex]) {
+                if (isNaN(val) || val < 0) val = 0;
+                if (val > b.totalAmount) val = b.totalAmount;
+                b.earnedInstances[instanceIndex].usedAmount = val;
                 this.saveState();
                 this.render();
                 return;

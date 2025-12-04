@@ -4,9 +4,9 @@
  */
 const DateUtils = {
     /**
-     * Calculates the expiry date for a carryover benefit.
+     * Calculates the expiry date for a carryover benefit instance.
      * For carryover benefits, the credit earned in year X is available until the end of year X+1.
-     * @param {Date} earnedDate - The date when the benefit was earned
+     * @param {Date|string} earnedDate - The date when the benefit was earned
      * @returns {Date} The expiry date (end of next calendar year)
      */
     calculateCarryoverExpiryDate(earnedDate) {
@@ -18,16 +18,15 @@ const DateUtils = {
     },
 
     /**
-     * Checks if a carryover benefit is currently active (earned and not expired).
-     * @param {Object} benefit - The benefit object
+     * Checks if a specific carryover instance is currently active (not expired).
+     * @param {Object} instance - The earned instance object with earnedDate
      * @param {Date} referenceDate - Usually "today"
-     * @returns {boolean} True if the benefit is earned and not expired
+     * @returns {boolean} True if the instance is not expired
      */
-    isCarryoverActive(benefit, referenceDate) {
-        if (!benefit.isCarryover) return false;
-        if (!benefit.earnedDate) return false; // Not yet earned
+    isCarryoverInstanceActive(instance, referenceDate) {
+        if (!instance || !instance.earnedDate) return false;
         
-        const expiryDate = this.calculateCarryoverExpiryDate(benefit.earnedDate);
+        const expiryDate = this.calculateCarryoverExpiryDate(instance.earnedDate);
         const today = new Date(referenceDate);
         today.setHours(0, 0, 0, 0);
         
@@ -35,12 +34,95 @@ const DateUtils = {
     },
 
     /**
+     * Gets all active (non-expired) earned instances for a carryover benefit.
+     * @param {Object} benefit - The benefit object
+     * @param {Date} referenceDate - Usually "today"
+     * @returns {Array} Array of active earned instances
+     */
+    getActiveCarryoverInstances(benefit, referenceDate) {
+        if (!benefit.isCarryover) return [];
+        
+        // Handle legacy single earnedDate format
+        if (benefit.earnedDate && !benefit.earnedInstances) {
+            const legacyInstance = {
+                earnedDate: benefit.earnedDate,
+                usedAmount: benefit.usedAmount || 0
+            };
+            if (this.isCarryoverInstanceActive(legacyInstance, referenceDate)) {
+                return [legacyInstance];
+            }
+            return [];
+        }
+        
+        // Handle new array format
+        if (!benefit.earnedInstances || !Array.isArray(benefit.earnedInstances)) {
+            return [];
+        }
+        
+        return benefit.earnedInstances.filter(instance => 
+            this.isCarryoverInstanceActive(instance, referenceDate)
+        );
+    },
+
+    /**
+     * Checks if a carryover benefit has any active (non-expired) earned instances.
+     * @param {Object} benefit - The benefit object
+     * @param {Date} referenceDate - Usually "today"
+     * @returns {boolean} True if there's at least one active earned instance
+     */
+    hasActiveCarryoverInstance(benefit, referenceDate) {
+        return this.getActiveCarryoverInstances(benefit, referenceDate).length > 0;
+    },
+
+    /**
+     * Gets the total remaining credit across all active earned instances.
+     * @param {Object} benefit - The benefit object
+     * @param {Date} referenceDate - Usually "today"
+     * @returns {number} Total remaining credit
+     */
+    getTotalCarryoverRemaining(benefit, referenceDate) {
+        const activeInstances = this.getActiveCarryoverInstances(benefit, referenceDate);
+        return activeInstances.reduce((total, instance) => {
+            const remaining = benefit.totalAmount - (instance.usedAmount || 0);
+            return total + Math.max(0, remaining);
+        }, 0);
+    },
+
+    /**
      * Gets the earn year from a date (used to determine when the benefit expires).
-     * @param {Date} earnedDate - The date when the benefit was earned  
+     * @param {Date|string} earnedDate - The date when the benefit was earned  
      * @returns {number} The year the benefit was earned
      */
     getEarnYear(earnedDate) {
         return new Date(earnedDate).getFullYear();
+    },
+
+    /**
+     * Checks if a carryover benefit can be earned in the current year.
+     * Returns true if no instance has been earned in the current year yet.
+     * @param {Object} benefit - The benefit object
+     * @param {Date} referenceDate - Usually "today"
+     * @returns {boolean} True if the benefit can still be earned this year
+     */
+    canEarnCarryoverThisYear(benefit, referenceDate) {
+        if (!benefit.isCarryover) return false;
+        
+        const currentYear = new Date(referenceDate).getFullYear();
+        
+        // Handle legacy format
+        if (benefit.earnedDate && !benefit.earnedInstances) {
+            return this.getEarnYear(benefit.earnedDate) !== currentYear;
+        }
+        
+        // Check if any instance was already earned this year
+        if (benefit.earnedInstances && Array.isArray(benefit.earnedInstances)) {
+            const earnedThisYear = benefit.earnedInstances.some(instance => 
+                this.getEarnYear(instance.earnedDate) === currentYear
+            );
+            return !earnedThisYear;
+        }
+        
+        return true; // No instances earned yet
     },
 
     /**
