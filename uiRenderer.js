@@ -20,7 +20,11 @@ class UIRenderer {
             const benefitDesc = item.earnYear 
                 ? `${item.benefit.description} (${item.earnYear})` 
                 : item.benefit.description;
-            const dateLabel = item.benefit.isCarryover ? 'Expires' : 'Resets';
+            // Check if carryover using method or property
+            const isCarryover = item.benefit.isCarryoverBenefit 
+                ? item.benefit.isCarryoverBenefit() 
+                : item.benefit.isCarryover;
+            const dateLabel = isCarryover ? 'Expires' : 'Resets';
             li.innerHTML = `
                 <span class="expiring-item-amount" style="${isFull ? 'color:var(--success)' : ''}">
                     $${isFull ? item.benefit.totalAmount.toFixed(2) : item.remainingAmount.toFixed(2)}
@@ -106,8 +110,14 @@ class UIRenderer {
 
         const cardMeta = document.createElement('div');
         cardMeta.className = 'card-meta';
-        const anniversary = new Date(card.anniversaryDate);
-        anniversary.setMinutes(anniversary.getMinutes() + anniversary.getTimezoneOffset());
+        // Use Card method if available
+        const anniversary = card.getAnniversaryDate 
+            ? card.getAnniversaryDate() 
+            : (() => {
+                const d = new Date(card.anniversaryDate);
+                d.setMinutes(d.getMinutes() + d.getTimezoneOffset());
+                return d;
+              })();
         cardMeta.textContent = `Anniversary: ${anniversary.toLocaleDateString()}`;
         cardInfo.appendChild(cardMeta);
 
@@ -180,7 +190,10 @@ class UIRenderer {
 
         const isAutoClaimed = this.app.isAutoClaimActive(benefit);
         const isIgnored = this.app.isIgnoredActive(benefit);
-        const isCarryover = benefit.isCarryover === true;
+        // Check carryover using method or property
+        const isCarryover = benefit.isCarryoverBenefit 
+            ? benefit.isCarryoverBenefit() 
+            : benefit.isCarryover === true;
         
         // For carryover benefits, get active instances
         const activeInstances = isCarryover ? this.app.getActiveCarryoverInstances(benefit) : [];
@@ -196,7 +209,10 @@ class UIRenderer {
             progressPercent = (totalCredit > 0) ? (totalUsed / totalCredit) * 100 : 0;
             isUsed = remaining <= 0;
         } else {
-            remaining = benefit.totalAmount - benefit.usedAmount;
+            // Use Benefit method if available
+            remaining = benefit.getRemainingAmount 
+                ? benefit.getRemainingAmount() 
+                : benefit.totalAmount - benefit.usedAmount;
             progressPercent = (benefit.totalAmount > 0) ? (benefit.usedAmount / benefit.totalAmount) * 100 : 0;
             isUsed = remaining <= 0;
         }
@@ -316,27 +332,37 @@ class UIRenderer {
             if (hasEarnedInstances) {
                 // Show expiry info for each instance
                 activeInstances.forEach((instance, index) => {
-                    const expiryDate = DateUtils.calculateCarryoverExpiryDate(instance.earnedDate);
-                    const earnYear = DateUtils.getEarnYear(instance.earnedDate);
+                    const expiryDate = CarryoverCycle.calculateExpiryDate(instance.earnedDate);
+                    const earnYear = CarryoverCycle.getEarnYear(instance.earnedDate);
                     const instanceRemaining = benefit.totalAmount - (instance.usedAmount || 0);
                     dateInfo.push(`${earnYear} credit ($${instanceRemaining.toFixed(2)}): expires ${expiryDate.toLocaleDateString()}`);
                 });
             }
             if (canEarnThisYear) {
-                const earnDeadline = DateUtils.calculateCarryoverEarnDeadline(benefit, this.app.today);
+                // Use Benefit method if available
+                const earnDeadline = benefit.getCarryoverEarnDeadline 
+                    ? benefit.getCarryoverEarnDeadline(this.app.today)
+                    : DateUtils.calculateCarryoverEarnDeadline(benefit, this.app.today);
                 dateInfo.push(`New credit: earn by ${earnDeadline.toLocaleDateString()}`);
             }
             nextResetDiv.innerHTML = dateInfo.join('<br>');
-        } else if (benefit.frequency !== 'one-time') {
-            const nextResetDate = DateUtils.calculateNextResetDate(benefit, card, this.app.today);
-            nextResetDiv.textContent = `Resets on: ${nextResetDate.toLocaleDateString()}`;
         } else {
-            if (benefit.expiryDate) {
-                const expiryDate = new Date(benefit.expiryDate);
-                expiryDate.setMinutes(expiryDate.getMinutes() + expiryDate.getTimezoneOffset());
-                nextResetDiv.textContent = `Expires on: ${expiryDate.toLocaleDateString()}`;
+            // Check if one-time using method or property
+            const isOneTime = benefit.isOneTime ? benefit.isOneTime() : (benefit.frequency === 'one-time');
+            if (!isOneTime) {
+                // Use Benefit method if available
+                const nextResetDate = benefit.getNextResetDate 
+                    ? benefit.getNextResetDate(this.app.today)
+                    : DateUtils.calculateNextResetDate(benefit, card, this.app.today);
+                nextResetDiv.textContent = `Resets on: ${nextResetDate.toLocaleDateString()}`;
             } else {
-                nextResetDiv.textContent = `One-time benefit`;
+                if (benefit.expiryDate) {
+                    const expiryDate = new Date(benefit.expiryDate);
+                    expiryDate.setMinutes(expiryDate.getMinutes() + expiryDate.getTimezoneOffset());
+                    nextResetDiv.textContent = `Expires on: ${expiryDate.toLocaleDateString()}`;
+                } else {
+                    nextResetDiv.textContent = `One-time benefit`;
+                }
             }
         }
 
@@ -416,7 +442,7 @@ class UIRenderer {
             // Show usage controls for each earned instance
             if (hasEarnedInstances) {
                 activeInstances.forEach((instance, index) => {
-                    const earnYear = DateUtils.getEarnYear(instance.earnedDate);
+                    const earnYear = CarryoverCycle.getEarnYear(instance.earnedDate);
                     const instanceContainer = document.createElement('div');
                     instanceContainer.style.cssText = 'display: flex; align-items: center; gap: 10px; margin-top: 5px;';
                     
@@ -824,8 +850,15 @@ class UIRenderer {
         form.style.marginBottom = '0';
         const uId = Math.random().toString(36).substr(2, 9);
 
-        const isCarryover = benefit.isCarryover === true;
-        const isRecurring = benefit.frequency !== 'one-time' && !isCarryover;
+        // Check carryover using method or property
+        const isCarryover = benefit.isCarryoverBenefit 
+            ? benefit.isCarryoverBenefit() 
+            : benefit.isCarryover === true;
+        // Check one-time using method or property
+        const isOneTime = benefit.isOneTime 
+            ? benefit.isOneTime() 
+            : benefit.frequency === 'one-time';
+        const isRecurring = !isOneTime && !isCarryover;
         const hasAutoClaim = benefit.autoClaim === true;
         const hasIgnored = benefit.ignored === true;
 
