@@ -156,6 +156,6 @@
     border-color: transparent;
 }
 
-.expiring-subsection .expiring-item-amount {
+.expiring-subsection.fully-used-section .expiring-item-amount {
     color: var(--success); /* Green for used */
 }
