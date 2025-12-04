@@ -184,13 +184,13 @@ class MinimumSpendCycle {
                 periodEnd.setDate(0);
                 break;
             case 'biannual':
-                // End of current half-year
+                // End of current half-year - use setDate(0) for consistency
                 if (today.getMonth() < 6) {
-                    periodEnd.setMonth(5);
-                    periodEnd.setDate(30);
+                    periodEnd.setMonth(6);
+                    periodEnd.setDate(0); // Last day of June
                 } else {
-                    periodEnd.setMonth(11);
-                    periodEnd.setDate(31);
+                    periodEnd.setMonth(12);
+                    periodEnd.setDate(0); // Last day of December (month 11)
                 }
                 break;
             case 'yearly':

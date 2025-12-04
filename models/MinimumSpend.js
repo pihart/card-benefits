@@ -20,7 +20,7 @@ class MinimumSpend {
      * @param {Date|string|null} anniversaryDate - Card anniversary date (for anniversary-based cycles)
      */
     constructor(data, anniversaryDate = null) {
-        this.id = data.id || `minspend-${Math.random().toString(36).substr(2, 9)}`;
+        this.id = data.id || `minspend-${Math.random().toString(36).substring(2, 11)}`;
         this.description = data.description;
         this.targetAmount = data.targetAmount;
         this.currentAmount = data.currentAmount || 0;
