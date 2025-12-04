@@ -17,15 +17,19 @@ class UIRenderer {
         const createItem = (item, isFull) => {
             const li = document.createElement('li');
             li.className = 'expiring-item';
+            const benefitDesc = item.earnYear 
+                ? `${item.benefit.description} (${item.earnYear})` 
+                : item.benefit.description;
+            const dateLabel = item.benefit.isCarryover ? 'Expires' : 'Resets';
             li.innerHTML = `
                 <span class="expiring-item-amount" style="${isFull ? 'color:var(--success)' : ''}">
                     $${isFull ? item.benefit.totalAmount.toFixed(2) : item.remainingAmount.toFixed(2)}
                 </span>
                 <div class="expiring-item-details">
-                    <div class="expiring-item-benefit">${item.benefit.description}</div>
+                    <div class="expiring-item-benefit">${benefitDesc}</div>
                     <div class="expiring-item-card">${item.cardName}</div>
                 </div>
-                <span class="expiring-item-date">Resets: ${item.nextResetDate.toLocaleDateString()}</span>
+                <span class="expiring-item-date">${dateLabel}: ${item.nextResetDate.toLocaleDateString()}</span>
             `;
             return li;
         };
@@ -174,12 +178,28 @@ class UIRenderer {
         li.className = 'benefit-item';
         li.dataset.benefitId = benefit.id;
 
-        const remaining = benefit.totalAmount - benefit.usedAmount;
-        const progressPercent = (benefit.totalAmount > 0) ? (benefit.usedAmount / benefit.totalAmount) * 100 : 0;
-        const isUsed = remaining <= 0;
-
         const isAutoClaimed = this.app.isAutoClaimActive(benefit);
         const isIgnored = this.app.isIgnoredActive(benefit);
+        const isCarryover = benefit.isCarryover === true;
+        
+        // For carryover benefits, get active instances
+        const activeInstances = isCarryover ? this.app.getActiveCarryoverInstances(benefit) : [];
+        const hasEarnedInstances = activeInstances.length > 0;
+        const canEarnThisYear = isCarryover ? this.app.canEarnCarryoverThisYear(benefit) : false;
+        
+        // Calculate total remaining for carryover
+        let remaining, progressPercent, isUsed;
+        if (isCarryover && hasEarnedInstances) {
+            remaining = this.app.getTotalCarryoverRemaining(benefit);
+            const totalCredit = activeInstances.length * benefit.totalAmount;
+            const totalUsed = activeInstances.reduce((sum, inst) => sum + (inst.usedAmount || 0), 0);
+            progressPercent = (totalCredit > 0) ? (totalUsed / totalCredit) * 100 : 0;
+            isUsed = remaining <= 0;
+        } else {
+            remaining = benefit.totalAmount - benefit.usedAmount;
+            progressPercent = (benefit.totalAmount > 0) ? (benefit.usedAmount / benefit.totalAmount) * 100 : 0;
+            isUsed = remaining <= 0;
+        }
 
         if (isCollapsed) li.classList.add('benefit-used');
         if (isIgnored) li.classList.add('benefit-ignored');
@@ -198,6 +218,15 @@ class UIRenderer {
         let titleHtml = `<span class="description">${benefit.description}</span>`;
         if (isAutoClaimed) titleHtml += `<span class="auto-claim-badge">🔄 Auto-Claim</span>`;
         if (isIgnored) titleHtml += `<span class="ignored-badge">🚫 Ignored</span>`;
+        if (isCarryover) {
+            if (hasEarnedInstances) {
+                const instanceCount = activeInstances.length;
+                titleHtml += `<span class="carryover-badge carryover-earned">✅ ${instanceCount} Earned</span>`;
+            }
+            if (canEarnThisYear) {
+                titleHtml += `<span class="carryover-badge carryover-pending">⏳ Earning</span>`;
+            }
+        }
 
         // Flex wrapper for title row
         const titleRow = document.createElement('div');
@@ -214,8 +243,27 @@ class UIRenderer {
 
         const statusSpan = document.createElement('span');
         statusSpan.className = 'status';
-        statusSpan.style.color = isUsed ? 'var(--success)' : 'var(--danger)';
-        statusSpan.textContent = `$${remaining.toFixed(2)} remaining`;
+        
+        if (isCarryover) {
+            if (hasEarnedInstances) {
+                // Show total remaining across all instances
+                statusSpan.style.color = isUsed ? 'var(--success)' : 'var(--danger)';
+                statusSpan.textContent = `$${remaining.toFixed(2)} remaining`;
+            } else if (canEarnThisYear) {
+                // Show earn progress status
+                statusSpan.style.color = 'var(--warning)';
+                const earnProgress = benefit.earnProgress || 0;
+                const earnThreshold = benefit.earnThreshold || 0;
+                statusSpan.textContent = `$${earnProgress.toFixed(2)} / $${earnThreshold.toFixed(2)} to earn`;
+            } else {
+                statusSpan.style.color = 'var(--secondary-color)';
+                statusSpan.textContent = 'No active credits';
+            }
+        } else {
+            // Normal remaining status
+            statusSpan.style.color = isUsed ? 'var(--success)' : 'var(--danger)';
+            statusSpan.textContent = `$${remaining.toFixed(2)} remaining`;
+        }
         detailsDiv.appendChild(statusSpan);
 
         detailsDiv.onclick = (e) => {
@@ -229,19 +277,57 @@ class UIRenderer {
         // Meta
         const metaDiv = document.createElement('div');
         metaDiv.className = 'meta';
-        let metaText = `($${benefit.usedAmount.toFixed(2)} / $${benefit.totalAmount.toFixed(2)}) - ${benefit.frequency} benefit`;
-        if (benefit.frequency !== 'one-time') metaText += ` | ${benefit.resetType}`;
+        let metaText;
+        if (isCarryover) {
+            if (hasEarnedInstances) {
+                const totalUsed = activeInstances.reduce((sum, inst) => sum + (inst.usedAmount || 0), 0);
+                const totalCredit = activeInstances.length * benefit.totalAmount;
+                metaText = `($${totalUsed.toFixed(2)} / $${totalCredit.toFixed(2)}) - ${activeInstances.length} carryover credit(s)`;
+            } else if (canEarnThisYear) {
+                metaText = `Earn $${benefit.earnThreshold.toFixed(2)} spend to unlock $${benefit.totalAmount.toFixed(2)} credit`;
+            } else {
+                metaText = `Carryover benefit - no active credits`;
+            }
+        } else {
+            metaText = `($${benefit.usedAmount.toFixed(2)} / $${benefit.totalAmount.toFixed(2)}) - ${benefit.frequency} benefit`;
+            if (benefit.frequency !== 'one-time') metaText += ` | ${benefit.resetType}`;
+        }
         metaDiv.textContent = metaText;
 
-        // Progress
+        // Progress bar - show earn progress for earning carryover, usage progress otherwise
         const progressContainer = document.createElement('div');
         progressContainer.className = 'progress-bar';
-        progressContainer.innerHTML = `<div class="progress-bar-inner" style="width: ${progressPercent}%; background-color: ${isUsed ? 'var(--success)' : 'var(--primary-color)'};"></div>`;
+        if (isCarryover && canEarnThisYear && !hasEarnedInstances) {
+            // Earn progress bar (only show when earning and no earned instances)
+            const earnProgress = benefit.earnProgress || 0;
+            const earnThreshold = benefit.earnThreshold || 1;
+            const earnPercent = Math.min((earnProgress / earnThreshold) * 100, 100);
+            progressContainer.innerHTML = `<div class="progress-bar-inner" style="width: ${earnPercent}%; background-color: var(--warning);"></div>`;
+        } else {
+            // Normal usage progress bar
+            progressContainer.innerHTML = `<div class="progress-bar-inner" style="width: ${progressPercent}%; background-color: ${isUsed ? 'var(--success)' : 'var(--primary-color)'};"></div>`;
+        }
 
-        // Reset Date
+        // Reset/Expiry Date section
         const nextResetDiv = document.createElement('div');
         nextResetDiv.className = 'next-reset';
-        if (benefit.frequency !== 'one-time') {
+        if (isCarryover) {
+            let dateInfo = [];
+            if (hasEarnedInstances) {
+                // Show expiry info for each instance
+                activeInstances.forEach((instance, index) => {
+                    const expiryDate = DateUtils.calculateCarryoverExpiryDate(instance.earnedDate);
+                    const earnYear = DateUtils.getEarnYear(instance.earnedDate);
+                    const instanceRemaining = benefit.totalAmount - (instance.usedAmount || 0);
+                    dateInfo.push(`${earnYear} credit ($${instanceRemaining.toFixed(2)}): expires ${expiryDate.toLocaleDateString()}`);
+                });
+            }
+            if (canEarnThisYear) {
+                const earnDeadline = DateUtils.calculateCarryoverEarnDeadline(benefit, this.app.today);
+                dateInfo.push(`New credit: earn by ${earnDeadline.toLocaleDateString()}`);
+            }
+            nextResetDiv.innerHTML = dateInfo.join('<br>');
+        } else if (benefit.frequency !== 'one-time') {
             const nextResetDate = DateUtils.calculateNextResetDate(benefit, card, this.app.today);
             nextResetDiv.textContent = `Resets on: ${nextResetDate.toLocaleDateString()}`;
         } else {
@@ -254,72 +340,222 @@ class UIRenderer {
             }
         }
 
-        // Controls (Same as before)
+        // Controls - different for carryover vs regular
         const controlsDiv = document.createElement('div');
         controlsDiv.className = 'benefit-controls';
-        const updateLabel = document.createElement('label');
-        updateLabel.textContent = 'Set used: $';
+        
+        // For carryover benefits, show earn progress and/or instance usage controls
+        if (isCarryover) {
+            // Show earn progress controls if can still earn this year
+            if (canEarnThisYear) {
+                const earnLabel = document.createElement('label');
+                earnLabel.textContent = 'Spend progress: $';
 
-        const inputWrapper = document.createElement('div');
-        inputWrapper.className = 'smart-input-wrapper';
-        const decBtn = document.createElement('button');
-        decBtn.className = 'smart-stepper-btn';
-        decBtn.textContent = '−';
-        decBtn.tabIndex = -1;
-        const updateInput = document.createElement('input');
-        updateInput.type = 'number';
-        updateInput.value = benefit.usedAmount.toFixed(2);
-        updateInput.min = "0";
-        updateInput.max = benefit.totalAmount;
-        updateInput.step = "0.01";
-        const incBtn = document.createElement('button');
-        incBtn.className = 'smart-stepper-btn';
-        incBtn.textContent = '+';
-        incBtn.tabIndex = -1;
+                const earnInputWrapper = document.createElement('div');
+                earnInputWrapper.className = 'smart-input-wrapper';
+                const earnDecBtn = document.createElement('button');
+                earnDecBtn.className = 'smart-stepper-btn';
+                earnDecBtn.textContent = '−';
+                earnDecBtn.tabIndex = -1;
+                const earnInput = document.createElement('input');
+                earnInput.type = 'number';
+                earnInput.value = (benefit.earnProgress || 0).toFixed(2);
+                earnInput.min = "0";
+                earnInput.step = "0.01";
+                const earnIncBtn = document.createElement('button');
+                earnIncBtn.className = 'smart-stepper-btn';
+                earnIncBtn.textContent = '+';
+                earnIncBtn.tabIndex = -1;
 
-        const getSmartStep = () => {
-            if (benefit.totalAmount >= 200) return 5;
-            if (benefit.totalAmount >= 10) return 1;
-            return 0.01;
-        };
-        const handleSmartIncrement = (direction) => {
-            const step = getSmartStep();
-            let current = parseFloat(updateInput.value) || 0;
-            let nextVal;
-            if (direction === 'up') {
-                nextVal = (Math.floor(current / step) + 1) * step;
-            } else {
-                if (current % step === 0) nextVal = current - step;
-                else nextVal = Math.ceil(current / step) * step - step;
+                const getEarnSmartStep = () => {
+                    if (benefit.earnThreshold >= 1000) return 50;
+                    if (benefit.earnThreshold >= 200) return 10;
+                    if (benefit.earnThreshold >= 10) return 1;
+                    return 0.01;
+                };
+                const handleEarnSmartIncrement = (direction) => {
+                    const step = getEarnSmartStep();
+                    let current = parseFloat(earnInput.value) || 0;
+                    let nextVal;
+                    if (direction === 'up') {
+                        nextVal = (Math.floor(current / step) + 1) * step;
+                    } else {
+                        if (current % step === 0) nextVal = current - step;
+                        else nextVal = Math.ceil(current / step) * step - step;
+                    }
+                    if (nextVal < 0) nextVal = 0;
+                    nextVal = parseFloat(nextVal.toFixed(2));
+                    earnInput.value = nextVal.toFixed(2);
+                    this.app.handleUpdateEarnProgress(benefit.id, nextVal);
+                };
+
+                earnDecBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    handleEarnSmartIncrement('down');
+                };
+                earnIncBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    handleEarnSmartIncrement('up');
+                };
+                earnInput.onfocus = (e) => e.target.select();
+                earnInput.onblur = (e) => {
+                    if (e.target.value === '') e.target.value = (benefit.earnProgress || 0).toFixed(2);
+                };
+                earnInput.onchange = (e) => {
+                    this.app.handleUpdateEarnProgress(benefit.id, parseFloat(e.target.value));
+                };
+
+                earnInputWrapper.appendChild(earnDecBtn);
+                earnInputWrapper.appendChild(earnInput);
+                earnInputWrapper.appendChild(earnIncBtn);
+
+                controlsDiv.appendChild(earnLabel);
+                controlsDiv.appendChild(earnInputWrapper);
             }
-            if (nextVal < 0) nextVal = 0;
-            if (nextVal > benefit.totalAmount) nextVal = benefit.totalAmount;
-            nextVal = parseFloat(nextVal.toFixed(2));
-            updateInput.value = nextVal.toFixed(2);
-            this.app.handleUpdateBenefitUsage(benefit.id, nextVal);
-        };
 
-        decBtn.onclick = (e) => {
-            e.stopPropagation();
-            handleSmartIncrement('down');
-        };
-        incBtn.onclick = (e) => {
-            e.stopPropagation();
-            handleSmartIncrement('up');
-        };
-        updateInput.onfocus = (e) => {
-            e.target.select();
-        };
-        updateInput.onblur = (e) => {
-            if (e.target.value === '') e.target.value = benefit.usedAmount.toFixed(2);
-        };
-        updateInput.onchange = (e) => {
-            this.app.handleUpdateBenefitUsage(benefit.id, parseFloat(e.target.value));
-        };
+            // Show usage controls for each earned instance
+            if (hasEarnedInstances) {
+                activeInstances.forEach((instance, index) => {
+                    const earnYear = DateUtils.getEarnYear(instance.earnedDate);
+                    const instanceContainer = document.createElement('div');
+                    instanceContainer.style.cssText = 'display: flex; align-items: center; gap: 10px; margin-top: 5px;';
+                    
+                    const usageLabel = document.createElement('label');
+                    usageLabel.textContent = `${earnYear} used: $`;
 
-        inputWrapper.appendChild(decBtn);
-        inputWrapper.appendChild(updateInput);
-        inputWrapper.appendChild(incBtn);
+                    const inputWrapper = document.createElement('div');
+                    inputWrapper.className = 'smart-input-wrapper';
+                    const decBtn = document.createElement('button');
+                    decBtn.className = 'smart-stepper-btn';
+                    decBtn.textContent = '−';
+                    decBtn.tabIndex = -1;
+                    const updateInput = document.createElement('input');
+                    updateInput.type = 'number';
+                    updateInput.value = (instance.usedAmount || 0).toFixed(2);
+                    updateInput.min = "0";
+                    updateInput.max = benefit.totalAmount;
+                    updateInput.step = "0.01";
+                    const incBtn = document.createElement('button');
+                    incBtn.className = 'smart-stepper-btn';
+                    incBtn.textContent = '+';
+                    incBtn.tabIndex = -1;
+
+                    const getSmartStep = () => {
+                        if (benefit.totalAmount >= 200) return 5;
+                        if (benefit.totalAmount >= 10) return 1;
+                        return 0.01;
+                    };
+                    const handleSmartIncrement = (direction) => {
+                        const step = getSmartStep();
+                        let current = parseFloat(updateInput.value) || 0;
+                        let nextVal;
+                        if (direction === 'up') {
+                            nextVal = (Math.floor(current / step) + 1) * step;
+                        } else {
+                            if (current % step === 0) nextVal = current - step;
+                            else nextVal = Math.ceil(current / step) * step - step;
+                        }
+                        if (nextVal < 0) nextVal = 0;
+                        if (nextVal > benefit.totalAmount) nextVal = benefit.totalAmount;
+                        nextVal = parseFloat(nextVal.toFixed(2));
+                        updateInput.value = nextVal.toFixed(2);
+                        this.app.handleUpdateCarryoverInstanceUsage(benefit.id, index, nextVal);
+                    };
+
+                    decBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        handleSmartIncrement('down');
+                    };
+                    incBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        handleSmartIncrement('up');
+                    };
+                    updateInput.onfocus = (e) => e.target.select();
+                    updateInput.onblur = (e) => {
+                        if (e.target.value === '') e.target.value = (instance.usedAmount || 0).toFixed(2);
+                    };
+                    updateInput.onchange = (e) => {
+                        this.app.handleUpdateCarryoverInstanceUsage(benefit.id, index, parseFloat(e.target.value));
+                    };
+
+                    inputWrapper.appendChild(decBtn);
+                    inputWrapper.appendChild(updateInput);
+                    inputWrapper.appendChild(incBtn);
+
+                    instanceContainer.appendChild(usageLabel);
+                    instanceContainer.appendChild(inputWrapper);
+                    controlsDiv.appendChild(instanceContainer);
+                });
+            }
+        } else {
+            // Normal usage controls (for non-carryover benefits)
+            const updateLabel = document.createElement('label');
+            updateLabel.textContent = 'Set used: $';
+
+            const inputWrapper = document.createElement('div');
+            inputWrapper.className = 'smart-input-wrapper';
+            const decBtn = document.createElement('button');
+            decBtn.className = 'smart-stepper-btn';
+            decBtn.textContent = '−';
+            decBtn.tabIndex = -1;
+            const updateInput = document.createElement('input');
+            updateInput.type = 'number';
+            updateInput.value = benefit.usedAmount.toFixed(2);
+            updateInput.min = "0";
+            updateInput.max = benefit.totalAmount;
+            updateInput.step = "0.01";
+            const incBtn = document.createElement('button');
+            incBtn.className = 'smart-stepper-btn';
+            incBtn.textContent = '+';
+            incBtn.tabIndex = -1;
+
+            const getSmartStep = () => {
+                if (benefit.totalAmount >= 200) return 5;
+                if (benefit.totalAmount >= 10) return 1;
+                return 0.01;
+            };
+            const handleSmartIncrement = (direction) => {
+                const step = getSmartStep();
+                let current = parseFloat(updateInput.value) || 0;
+                let nextVal;
+                if (direction === 'up') {
+                    nextVal = (Math.floor(current / step) + 1) * step;
+                } else {
+                    if (current % step === 0) nextVal = current - step;
+                    else nextVal = Math.ceil(current / step) * step - step;
+                }
+                if (nextVal < 0) nextVal = 0;
+                if (nextVal > benefit.totalAmount) nextVal = benefit.totalAmount;
+                nextVal = parseFloat(nextVal.toFixed(2));
+                updateInput.value = nextVal.toFixed(2);
+                this.app.handleUpdateBenefitUsage(benefit.id, nextVal);
+            };
+
+            decBtn.onclick = (e) => {
+                e.stopPropagation();
+                handleSmartIncrement('down');
+            };
+            incBtn.onclick = (e) => {
+                e.stopPropagation();
+                handleSmartIncrement('up');
+            };
+            updateInput.onfocus = (e) => {
+                e.target.select();
+            };
+            updateInput.onblur = (e) => {
+                if (e.target.value === '') e.target.value = benefit.usedAmount.toFixed(2);
+            };
+            updateInput.onchange = (e) => {
+                this.app.handleUpdateBenefitUsage(benefit.id, parseFloat(e.target.value));
+            };
+
+            inputWrapper.appendChild(decBtn);
+            inputWrapper.appendChild(updateInput);
+            inputWrapper.appendChild(incBtn);
+
+            controlsDiv.appendChild(updateLabel);
+            controlsDiv.appendChild(inputWrapper);
+        }
 
         const rightControls = document.createElement('div');
         rightControls.className = 'controls-right';
@@ -334,8 +570,6 @@ class UIRenderer {
 
         rightControls.appendChild(editBtn);
         rightControls.appendChild(deleteBtn);
-        controlsDiv.appendChild(updateLabel);
-        controlsDiv.appendChild(inputWrapper);
         controlsDiv.appendChild(rightControls);
 
         li.appendChild(detailsDiv);
@@ -376,6 +610,7 @@ class UIRenderer {
                         <option value="annual">Annual</option>
                         <option value="every-4-years">Every 4 Years</option>
                         <option value="one-time">One-Time</option>
+                        <option value="carryover">Carryover (earn in year X, use til end of year X+1)</option>
                     </select>
                 </div>
             </div>
@@ -386,6 +621,15 @@ class UIRenderer {
                         <option value="calendar">Calendar (Jan 1, Apr 1, etc.)</option>
                         <option value="anniversary">Anniversary-Dated</option>
                     </select>
+                </div>
+            </div>
+            
+            <!-- Carryover Earn Threshold -->
+            <div class="form-row" id="carryover-row-${uId}" style="display:none; border-top:1px dashed #ccc; padding-top:10px;">
+                <div class="form-group">
+                    <label>Earn Threshold (minimum spend to earn)</label>
+                    <input type="number" name="earnThreshold" id="earn-threshold-${uId}" placeholder="3000.00" min="0.01" step="0.01">
+                    <small style="color: #666;">Spend this amount to unlock the credit. Credit is valid until end of next year.</small>
                 </div>
             </div>
             
@@ -428,6 +672,9 @@ class UIRenderer {
         const resetGroup = form.querySelector(`#reset-group-${uId}`);
         const resetSelect = form.querySelector(`#reset-${uId}`);
 
+        const carryoverRow = form.querySelector(`#carryover-row-${uId}`);
+        const earnThresholdInput = form.querySelector(`#earn-threshold-${uId}`);
+
         const acRow = form.querySelector(`#auto-claim-row-${uId}`);
         const acCheck = form.querySelector(`#ac-check-${uId}`);
         const acDateGroup = form.querySelector(`#ac-date-group-${uId}`);
@@ -440,15 +687,30 @@ class UIRenderer {
 
         freqSelect.onchange = (e) => {
             const isOneTime = e.target.value === 'one-time';
-            if (isOneTime) {
+            const isCarryover = e.target.value === 'carryover';
+            
+            if (isCarryover) {
+                // Show carryover-specific fields only
                 resetGroup.style.display = 'none';
                 resetSelect.required = false;
+                carryoverRow.style.display = 'flex';
+                earnThresholdInput.required = true;
+                acRow.style.display = 'none';
+                igRow.style.display = 'none';
+                expiryRow.style.display = 'none';
+            } else if (isOneTime) {
+                resetGroup.style.display = 'none';
+                resetSelect.required = false;
+                carryoverRow.style.display = 'none';
+                earnThresholdInput.required = false;
                 acRow.style.display = 'none';
                 igRow.style.display = 'none';
                 expiryRow.style.display = 'flex';
             } else {
                 resetGroup.style.display = 'block';
                 resetSelect.required = true;
+                carryoverRow.style.display = 'none';
+                earnThresholdInput.required = false;
                 acRow.style.display = 'flex';
                 igRow.style.display = 'flex';
                 expiryRow.style.display = 'none';
@@ -478,21 +740,30 @@ class UIRenderer {
         form.onsubmit = (e) => {
             e.preventDefault();
             const formData = new FormData(e.target);
+            const frequency = formData.get('frequency');
+            const isCarryover = frequency === 'carryover';
+            
             const benefitData = {
                 description: formData.get('description'),
                 totalAmount: parseFloat(formData.get('totalAmount')),
-                frequency: formData.get('frequency'),
-                resetType: formData.get('frequency') === 'one-time' ? null : formData.get('resetType'),
+                frequency: isCarryover ? 'carryover' : frequency,
+                resetType: (frequency === 'one-time' || isCarryover) ? null : formData.get('resetType'),
                 autoClaim: formData.get('autoClaim') === 'on',
                 autoClaimEndDate: formData.get('autoClaimEndDate') || null,
                 ignored: formData.get('ignored') === 'on',
                 ignoredEndDate: formData.get('ignoredEndDate') || null,
-                expiryDate: formData.get('frequency') === 'one-time' ? (formData.get('expiryDate') || null) : null
+                expiryDate: frequency === 'one-time' ? (formData.get('expiryDate') || null) : null,
+                // Carryover-specific fields
+                isCarryover: isCarryover,
+                earnThreshold: isCarryover ? parseFloat(formData.get('earnThreshold')) : null,
+                earnProgress: isCarryover ? 0 : null,
+                earnedDate: null
             };
             this.app.handleAddBenefit(cardId, benefitData);
             e.target.reset();
             resetGroup.style.display = 'none';
             acRow.style.display = 'none';
+            carryoverRow.style.display = 'none';
             acDateGroup.style.display = 'none';
             igRow.style.display = 'none';
             igDateGroup.style.display = 'none';
@@ -553,7 +824,8 @@ class UIRenderer {
         form.style.marginBottom = '0';
         const uId = Math.random().toString(36).substr(2, 9);
 
-        const isRecurring = benefit.frequency !== 'one-time';
+        const isCarryover = benefit.isCarryover === true;
+        const isRecurring = benefit.frequency !== 'one-time' && !isCarryover;
         const hasAutoClaim = benefit.autoClaim === true;
         const hasIgnored = benefit.ignored === true;
 
@@ -579,6 +851,7 @@ class UIRenderer {
                         <option value="annual" ${benefit.frequency === 'annual' ? 'selected' : ''}>Annual</option>
                         <option value="every-4-years" ${benefit.frequency === 'every-4-years' ? 'selected' : ''}>Every 4 Years</option>
                         <option value="one-time" ${benefit.frequency === 'one-time' ? 'selected' : ''}>One-Time</option>
+                        <option value="carryover" ${isCarryover ? 'selected' : ''}>Carryover</option>
                     </select>
                 </div>
             </div>
@@ -589,6 +862,15 @@ class UIRenderer {
                         <option value="calendar" ${benefit.resetType === 'calendar' ? 'selected' : ''}>Calendar</option>
                         <option value="anniversary" ${benefit.resetType === 'anniversary' ? 'selected' : ''}>Anniversary-Dated</option>
                     </select>
+                </div>
+            </div>
+
+            <!-- Carryover Earn Threshold -->
+            <div class="form-row" id="carryover-row-${uId}" style="display:${isCarryover ? 'flex' : 'none'}; border-top:1px dashed #ccc; padding-top:10px;">
+                <div class="form-group">
+                    <label>Earn Threshold (minimum spend to earn)</label>
+                    <input type="number" id="earn-threshold-${uId}" value="${(benefit.earnThreshold || 0).toFixed(2)}" min="0.01" step="0.01" ${isCarryover ? 'required' : ''}>
+                    <small style="color: #666;">Spend this amount to unlock the credit.</small>
                 </div>
             </div>
 
@@ -617,7 +899,7 @@ class UIRenderer {
             </div>
 
             <!-- Expiry Date for One-Time Benefits -->
-            <div class="form-row" id="expiry-row-${uId}" style="display:${!isRecurring ? 'flex' : 'none'}; border-top:1px dashed #ccc; padding-top:10px;">
+            <div class="form-row" id="expiry-row-${uId}" style="display:${(!isRecurring && !isCarryover) ? 'flex' : 'none'}; border-top:1px dashed #ccc; padding-top:10px;">
                 <div class="form-group">
                     <label>Expiry Date</label>
                     <input type="date" id="expiry-date-${uId}" value="${benefit.expiryDate || ''}">
@@ -636,6 +918,10 @@ class UIRenderer {
         const freqSelect = document.getElementById(`freq-${uId}`);
         const resetGroup = document.getElementById(`reset-group-${uId}`);
         const resetSelect = document.getElementById(`reset-${uId}`);
+        
+        const carryoverRow = document.getElementById(`carryover-row-${uId}`);
+        const earnThresholdInput = document.getElementById(`earn-threshold-${uId}`);
+        
         const acRow = document.getElementById(`auto-claim-row-${uId}`);
         const acCheck = document.getElementById(`ac-check-${uId}`);
         const acDateGroup = document.getElementById(`ac-date-group-${uId}`);
@@ -650,15 +936,30 @@ class UIRenderer {
         const expiryDateInput = document.getElementById(`expiry-date-${uId}`);
 
         freqSelect.onchange = (e) => {
-            if (e.target.value === 'one-time') {
+            const isCarryoverSelected = e.target.value === 'carryover';
+            const isOneTimeSelected = e.target.value === 'one-time';
+            
+            if (isCarryoverSelected) {
                 resetGroup.style.display = 'none';
                 resetSelect.required = false;
+                carryoverRow.style.display = 'flex';
+                earnThresholdInput.required = true;
+                acRow.style.display = 'none';
+                igRow.style.display = 'none';
+                expiryRow.style.display = 'none';
+            } else if (isOneTimeSelected) {
+                resetGroup.style.display = 'none';
+                resetSelect.required = false;
+                carryoverRow.style.display = 'none';
+                earnThresholdInput.required = false;
                 acRow.style.display = 'none';
                 igRow.style.display = 'none';
                 expiryRow.style.display = 'flex';
             } else {
                 resetGroup.style.display = 'block';
                 resetSelect.required = true;
+                carryoverRow.style.display = 'none';
+                earnThresholdInput.required = false;
                 acRow.style.display = 'flex';
                 igRow.style.display = 'flex';
                 expiryRow.style.display = 'none';
@@ -686,18 +987,37 @@ class UIRenderer {
         };
 
         document.getElementById(`save-${uId}`).onclick = () => {
+            const frequency = freqSelect.value;
+            const isCarryoverSelected = frequency === 'carryover';
+            
+            const earnThresholdValue = parseFloat(earnThresholdInput.value);
             const newData = {
                 description: document.getElementById(`desc-${uId}`).value.trim(),
                 totalAmount: parseFloat(document.getElementById(`amt-${uId}`).value),
-                frequency: freqSelect.value,
+                frequency: frequency,
                 resetType: null,
                 autoClaim: acCheck.checked,
                 autoClaimEndDate: acCheck.checked ? acDateInput.value : null,
                 ignored: igCheck.checked,
                 ignoredEndDate: igCheck.checked ? igDateInput.value : null,
-                expiryDate: freqSelect.value === 'one-time' ? (expiryDateInput.value || null) : null
+                expiryDate: frequency === 'one-time' ? (expiryDateInput.value || null) : null,
+                // Carryover-specific fields
+                isCarryover: isCarryoverSelected,
+                earnThreshold: isCarryoverSelected ? (isNaN(earnThresholdValue) ? 0 : earnThresholdValue) : null
             };
-            if (newData.frequency !== 'one-time') {
+            
+            // Preserve existing carryover state if still a carryover benefit
+            if (isCarryoverSelected && benefit.isCarryover) {
+                newData.earnProgress = benefit.earnProgress || 0;
+                newData.earnedDate = benefit.earnedDate || null;
+                newData.lastEarnReset = benefit.lastEarnReset || null;
+            } else if (isCarryoverSelected) {
+                // Converting to carryover
+                newData.earnProgress = 0;
+                newData.earnedDate = null;
+            }
+            
+            if (frequency !== 'one-time' && !isCarryoverSelected) {
                 newData.resetType = resetSelect.value;
             }
             if (newData.description && newData.totalAmount) {

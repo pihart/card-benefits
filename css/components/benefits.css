@@ -52,6 +52,28 @@
     font-weight: normal;
 }
 
+/* Badge for Carryover benefits */
+.carryover-badge {
+    font-size: 0.75rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 8px;
+    vertical-align: middle;
+    font-weight: normal;
+}
+
+.carryover-badge.carryover-pending {
+    background-color: #fff3cd; /* Light yellow/amber */
+    color: #856404;
+    border: 1px solid #ffc107;
+}
+
+.carryover-badge.carryover-earned {
+    background-color: #d1ecf1; /* Light blue */
+    color: #0c5460;
+    border: 1px solid #17a2b8;
+}
+
 .benefit-item .status {
     font-weight: bold;
     font-size: 1.1rem;
