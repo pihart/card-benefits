@@ -19,7 +19,7 @@ class UIRenderer {
             li.className = 'expiring-item';
             li.innerHTML = `
                 <span class="expiring-item-amount" style="${isFull ? 'color:var(--success)' : ''}">
-                    $${item.remainingAmount.toFixed(2)}
+                    $${isFull ? item.benefit.totalAmount.toFixed(2) : item.remainingAmount.toFixed(2)}
                 </span>
                 <div class="expiring-item-details">
                     <div class="expiring-item-benefit">${item.benefit.description}</div>
