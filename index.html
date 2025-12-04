@@ -100,8 +100,20 @@
         <!-- Settings/Storage Modal -->
         <div id="settings-modal" class="modal-overlay">
             <div class="modal-content">
-                <h2>Data Storage Settings</h2>
-                <p>Configure where your data is saved. <br><small>Current: <b id="current-storage-type">Local
+                <h2>Settings</h2>
+                
+                <h3 style="margin-top: 0; margin-bottom: 10px; font-size: 1rem; color: #555;">Custom Date Override</h3>
+                <div class="form-group">
+                    <label for="custom-date-input">Override Current Date</label>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="date" id="custom-date-input" style="flex: 1;">
+                        <button id="clear-custom-date-btn" class="secondary-btn" type="button">Use Real Date</button>
+                    </div>
+                    <small style="color: #666;">Set a custom date to simulate a different day. Leave empty to use the real current date.</small>
+                </div>
+
+                <h3 style="margin-top: 20px; margin-bottom: 10px; font-size: 1rem; color: #555;">Data Storage</h3>
+                <p style="margin-top: 0;">Configure where your data is saved. <br><small>Current: <b id="current-storage-type">Local
                     Storage</b></small></p>
 
                 <div class="form-group">

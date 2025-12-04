@@ -35,6 +35,10 @@ class BenefitTrackerApp {
         this.pollIntervalInput = document.getElementById('poll-interval-input');
         this.currentStorageLabel = document.getElementById('current-storage-type');
 
+        // Custom Date References
+        this.customDateInput = document.getElementById('custom-date-input');
+        this.clearCustomDateBtn = document.getElementById('clear-custom-date-btn');
+
         this.initListeners();
     }
 
@@ -58,16 +62,25 @@ class BenefitTrackerApp {
         };
         document.getElementById('settings-btn').onclick = () => {
             this.pollIntervalInput.value = this.pollInterval;
+            // Populate custom date input with stored value
+            const storedCustomDate = localStorage.getItem('creditCardBenefitTracker_customDate');
+            this.customDateInput.value = storedCustomDate || '';
             document.getElementById('settings-modal').style.display = 'flex';
         };
         document.getElementById('settings-cancel').onclick = () => document.getElementById('settings-modal').style.display = 'none';
         document.getElementById('settings-save').onclick = this.handleConnectCloud.bind(this);
         document.getElementById('use-local-storage-btn').onclick = this.handleSwitchToLocal.bind(this);
+
+        // Custom Date Listeners
+        this.customDateInput.addEventListener('change', this.handleCustomDateChange.bind(this));
+        this.clearCustomDateBtn.addEventListener('click', this.handleClearCustomDate.bind(this));
     }
 
     // ... (init and initLiveSync unchanged) ...
     async init() {
-        this.today.setHours(0, 0, 0, 0);
+        // Load custom date from localStorage if set
+        const storedCustomDate = localStorage.getItem('creditCardBenefitTracker_customDate');
+        this.setCurrentDate(storedCustomDate);
         this.expiringDays = parseInt(this.expiringDaysSelect.value, 10);
 
         const storedInterval = localStorage.getItem('creditCardBenefitTracker_pollInterval');
@@ -706,6 +719,52 @@ class BenefitTrackerApp {
             localStorage.removeItem('creditCardBenefitTracker_config');
             location.reload();
         }
+    }
+
+    /**
+     * Sets the current date based on a date string value.
+     * @param {string|null} dateValue - ISO date string (e.g., '2025-06-15') or null for real date
+     */
+    setCurrentDate(dateValue) {
+        if (dateValue) {
+            this.today = new Date(dateValue);
+            // Adjust for timezone offset to get the correct local date
+            this.today.setMinutes(this.today.getMinutes() + this.today.getTimezoneOffset());
+        } else {
+            this.today = new Date();
+        }
+        this.today.setHours(0, 0, 0, 0);
+    }
+
+    /**
+     * Checks for benefit resets and renders the UI.
+     * Shows reset modal if there are pending resets.
+     */
+    refreshBenefitsAndRender() {
+        this.pendingResets = this.checkAndResetBenefits();
+        if (this.pendingResets.length > 0) {
+            this.showResetModal(this.pendingResets);
+        } else {
+            this.render();
+        }
+    }
+
+    handleCustomDateChange(e) {
+        const dateValue = e.target.value;
+        if (dateValue) {
+            localStorage.setItem('creditCardBenefitTracker_customDate', dateValue);
+        } else {
+            localStorage.removeItem('creditCardBenefitTracker_customDate');
+        }
+        this.setCurrentDate(dateValue);
+        this.refreshBenefitsAndRender();
+    }
+
+    handleClearCustomDate() {
+        this.customDateInput.value = '';
+        localStorage.removeItem('creditCardBenefitTracker_customDate');
+        this.setCurrentDate(null);
+        this.refreshBenefitsAndRender();
     }
 }
 
