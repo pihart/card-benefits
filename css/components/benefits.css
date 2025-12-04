@@ -14,6 +14,11 @@
     gap: 10px;
 }
 
+.benefit-item.benefit-locked {
+    border-color: var(--secondary-color);
+    background-color: rgba(108, 117, 125, 0.05);
+}
+
 .benefit-item .details {
     display: flex;
     justify-content: space-between;
@@ -49,6 +54,19 @@
     margin-left: 8px;
     vertical-align: middle;
     border: 1px solid #f5c6cb;
+    font-weight: normal;
+}
+
+/* Badge for Locked benefits */
+.locked-badge {
+    font-size: 0.75rem;
+    background-color: #e2e3e5; /* Light gray */
+    color: #383d41;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 8px;
+    vertical-align: middle;
+    border: 1px solid #d6d8db;
     font-weight: normal;
 }
 
@@ -237,5 +255,130 @@ input[type=number] {
 }
 
 .show-add-benefit-btn {
+    width: 100%;
+}
+
+/* --- Minimum Spend Section --- */
+.min-spend-section-container {
+    border-top: 2px dashed var(--medium-gray);
+    padding-top: 20px;
+    margin-top: 20px;
+}
+
+.min-spend-header {
+    margin-bottom: 15px;
+    color: var(--dark-gray);
+}
+
+.min-spend-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 15px 0;
+}
+
+.min-spend-item {
+    border: 1px solid var(--warning);
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 15px;
+    display: grid;
+    gap: 10px;
+    background-color: rgba(255, 193, 7, 0.05);
+}
+
+.min-spend-item.min-spend-met {
+    border-color: var(--success);
+    background-color: rgba(40, 167, 69, 0.05);
+}
+
+.min-spend-item.min-spend-ignored {
+    border-color: var(--secondary-color);
+    background-color: rgba(108, 117, 125, 0.05);
+}
+
+.min-spend-item .details {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.min-spend-item .description {
+    font-weight: bold;
+    font-size: 1.1rem;
+}
+
+.min-spend-badge {
+    font-size: 0.75rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 8px;
+    vertical-align: middle;
+    font-weight: normal;
+}
+
+.min-spend-met-badge {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.min-spend-ignored-badge {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.min-spend-linked-badge {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    border: 1px solid #17a2b8;
+}
+
+.min-spend-item .status {
+    font-weight: bold;
+    font-size: 1.1rem;
+}
+
+.min-spend-item .meta {
+    font-size: 0.9rem;
+    color: #6c757d;
+    text-transform: capitalize;
+}
+
+.min-spend-item .next-reset {
+    font-size: 0.85rem;
+    font-style: italic;
+    color: #333;
+}
+
+/* Collapse transitions for minimum spends */
+.min-spend-item .meta,
+.min-spend-item .next-reset,
+.min-spend-item .benefit-controls,
+.min-spend-item .edit-form {
+    max-height: 500px;
+    overflow: hidden;
+    visibility: visible;
+    opacity: 1;
+    transition: max-height 0.3s ease-out, opacity 0.2s 0.1s, visibility 0.3s;
+}
+
+.min-spend-item.min-spend-collapsed .meta,
+.min-spend-item.min-spend-collapsed .next-reset,
+.min-spend-item.min-spend-collapsed .benefit-controls,
+.min-spend-item.min-spend-collapsed .edit-form {
+    max-height: 0;
+    opacity: 0;
+    visibility: hidden;
+    transition: max-height 0.3s ease-out, opacity 0.2s, visibility 0.3s;
+}
+
+/* --- Add Minimum Spend Button --- */
+.add-min-spend-container {
+    margin-top: 10px;
+}
+
+.show-add-min-spend-btn {
     width: 100%;
 }

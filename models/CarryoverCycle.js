@@ -1,19 +1,16 @@
 /**
  * Represents a carryover expiry cycle for benefits.
  * Carryover benefits can be earned once per year and are valid until the end of the following year.
+ * The earning requirement (minimum spend) is now handled separately by linking to a MinimumSpend object.
  * Uses dependency-injected current datetime for testability.
  */
 class CarryoverCycle {
     /**
      * @param {Object} config
-     * @param {number} config.earnThreshold - Spending threshold to earn the benefit
-     * @param {number} config.earnProgress - Current spending progress
      * @param {Array<Object>} config.earnedInstances - Array of earned instances [{earnedDate, usedAmount}]
-     * @param {Date|string|null} config.lastEarnReset - When the earn progress was last reset
+     * @param {Date|string|null} config.lastEarnReset - When the earn progress was last reset (for backward compatibility)
      */
-    constructor({ earnThreshold = 0, earnProgress = 0, earnedInstances = [], lastEarnReset = null }) {
-        this.earnThreshold = earnThreshold;
-        this.earnProgress = earnProgress;
+    constructor({ earnedInstances = [], lastEarnReset = null }) {
         this.earnedInstances = earnedInstances || [];
         this.lastEarnReset = lastEarnReset ? new Date(lastEarnReset) : null;
         
@@ -131,16 +128,6 @@ class CarryoverCycle {
     }
 
     /**
-     * Checks if the earn progress should be reset (new calendar year).
-     * @param {Date} currentDate - The reference date
-     * @returns {boolean}
-     */
-    shouldResetEarnProgress(currentDate) {
-        const resetDate = CarryoverCycle.getResetDate(currentDate);
-        return !this.lastEarnReset || this.lastEarnReset < resetDate;
-    }
-
-    /**
      * Gets the earliest expiry date among all active instances.
      * @param {Date} currentDate - The reference date
      * @returns {Date|null}
@@ -217,8 +204,6 @@ class CarryoverCycle {
      */
     toJSON() {
         return {
-            earnThreshold: this.earnThreshold,
-            earnProgress: this.earnProgress,
             earnedInstances: this.earnedInstances,
             lastEarnReset: this.lastEarnReset ? this.lastEarnReset.toISOString() : null
         };
@@ -231,8 +216,6 @@ class CarryoverCycle {
      */
     static fromJSON(data) {
         return new CarryoverCycle({
-            earnThreshold: data.earnThreshold,
-            earnProgress: data.earnProgress,
             earnedInstances: data.earnedInstances || [],
             lastEarnReset: data.lastEarnReset
         });

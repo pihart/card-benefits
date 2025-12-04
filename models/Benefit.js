@@ -18,10 +18,9 @@ class Benefit {
      * @param {string|null} data.ignoredEndDate - End date for ignored status
      * @param {string|null} data.expiryDate - Expiry date for one-time benefits
      * @param {boolean} data.isCarryover - Whether this is a carryover benefit
-     * @param {number|null} data.earnThreshold - Spending threshold for carryover benefits
-     * @param {number|null} data.earnProgress - Current earning progress for carryover
      * @param {Array|null} data.earnedInstances - Earned instances for carryover
-     * @param {string|null} data.lastEarnReset - Last earn reset date for carryover
+     * @param {string|null} data.lastEarnReset - Last earn reset date for carryover (for backward compatibility)
+     * @param {string|null} data.requiredMinimumSpendId - ID of the minimum spend that must be met to unlock/earn this benefit
      * @param {Date|string|null} anniversaryDate - Card anniversary date (for anniversary-based resets)
      */
     constructor(data, anniversaryDate = null) {
@@ -40,10 +39,12 @@ class Benefit {
         
         // Carryover-specific fields
         this.isCarryover = data.isCarryover || false;
-        this.earnThreshold = data.earnThreshold || null;
-        this.earnProgress = data.earnProgress || 0;
         this.earnedInstances = data.earnedInstances || [];
         this.lastEarnReset = data.lastEarnReset || null;
+
+        // Minimum spend precondition - links benefit to a minimum spend requirement
+        // For carryover benefits, this replaces the old earnThreshold field
+        this.requiredMinimumSpendId = data.requiredMinimumSpendId || null;
 
         // Store anniversary date for cycle calculations
         this._anniversaryDate = anniversaryDate;
@@ -51,8 +52,6 @@ class Benefit {
         // Create appropriate cycle instance
         if (this.isCarryover) {
             this._carryoverCycle = new CarryoverCycle({
-                earnThreshold: this.earnThreshold,
-                earnProgress: this.earnProgress,
                 earnedInstances: this.earnedInstances,
                 lastEarnReset: this.lastEarnReset
             });
@@ -136,6 +135,30 @@ class Benefit {
      */
     isRecurring() {
         return !this.isOneTime() && !this.isCarryoverBenefit();
+    }
+
+    /**
+     * Checks if this benefit has a required minimum spend.
+     * @returns {boolean}
+     */
+    hasRequiredMinimumSpend() {
+        return this.requiredMinimumSpendId !== null && this.requiredMinimumSpendId !== undefined;
+    }
+
+    /**
+     * Gets the required minimum spend ID.
+     * @returns {string|null}
+     */
+    getRequiredMinimumSpendId() {
+        return this.requiredMinimumSpendId;
+    }
+
+    /**
+     * Sets the required minimum spend ID.
+     * @param {string|null} minSpendId - The minimum spend ID or null to remove requirement
+     */
+    setRequiredMinimumSpendId(minSpendId) {
+        this.requiredMinimumSpendId = minSpendId || null;
     }
 
     /**
@@ -244,8 +267,6 @@ class Benefit {
      */
     _syncCarryoverCycle() {
         this._carryoverCycle = new CarryoverCycle({
-            earnThreshold: this.earnThreshold,
-            earnProgress: this.earnProgress,
             earnedInstances: this.earnedInstances,
             lastEarnReset: this.lastEarnReset
         });
@@ -333,28 +354,6 @@ class Benefit {
     }
 
     /**
-     * Updates earn progress for carryover benefits.
-     * @param {number} progress
-     * @param {Date} currentDate - Current date for earning new instance
-     * @returns {boolean} True if a new instance was earned
-     */
-    setEarnProgress(progress, currentDate) {
-        if (!this.isCarryoverBenefit()) return false;
-        if (isNaN(progress) || progress < 0) progress = 0;
-        this.earnProgress = progress;
-
-        // Check if threshold is met and can earn this year
-        if (progress >= this.earnThreshold && this.canEarnCarryoverThisYear(currentDate)) {
-            this.earnedInstances.push({
-                earnedDate: currentDate.toISOString(),
-                usedAmount: 0
-            });
-            return true;
-        }
-        return false;
-    }
-
-    /**
      * Updates usage for a specific carryover instance.
      * @param {number} instanceIndex
      * @param {number} amount
@@ -403,10 +402,9 @@ class Benefit {
             ignoredEndDate: this.ignoredEndDate,
             expiryDate: this.expiryDate,
             isCarryover: this.isCarryover,
-            earnThreshold: this.earnThreshold,
-            earnProgress: this.earnProgress,
             earnedInstances: this.earnedInstances,
-            lastEarnReset: this.lastEarnReset
+            lastEarnReset: this.lastEarnReset,
+            requiredMinimumSpendId: this.requiredMinimumSpendId
         };
         return data;
     }
