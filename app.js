@@ -1,6 +1,6 @@
 /**
  * Main Controller logic.
- * Coordinates Data (Store), Logic (Utils), and View (UIRenderer).
+ * Coordinates Data (Store), Logic (Models), and View (UIRenderer).
  */
 
 class BenefitTrackerApp {
@@ -8,6 +8,7 @@ class BenefitTrackerApp {
         /** @type {StorageInterface} */
         this.storage = null;
         this.ui = new UIRenderer(this); // Pass controller to View
+        /** @type {Array<Card>} */
         this.cards = [];
         this.today = new Date();
         this.expiringDays = 30;
@@ -85,7 +86,9 @@ class BenefitTrackerApp {
 
         this.toggleLoading(true);
         try {
-            this.cards = await this.storage.loadData();
+            const rawData = await this.storage.loadData();
+            // Convert raw data to Card instances
+            this.cards = rawData.map(cardData => Card.fromJSON(cardData));
         } catch (e) {
             console.error(e);
             alert("Error loading data. Please check settings.");
@@ -123,8 +126,13 @@ class BenefitTrackerApp {
             const remoteData = await this.storage.loadData({signal: this.pollAbortController.signal});
             this.pollAbortController = null;
 
-            if (JSON.stringify(this.cards) !== JSON.stringify(remoteData)) {
-                this.cards = remoteData;
+            // Convert to Card instances for comparison
+            const remoteCards = remoteData.map(cardData => Card.fromJSON(cardData));
+            const currentJSON = JSON.stringify(this.cards.map(c => c.toJSON()));
+            const remoteJSON = JSON.stringify(remoteCards.map(c => c.toJSON()));
+            
+            if (currentJSON !== remoteJSON) {
+                this.cards = remoteCards;
                 this.render();
             }
         } catch (e) {
@@ -147,7 +155,9 @@ class BenefitTrackerApp {
         this.isSaving = true;
         this.toggleLoading(true);
         try {
-            await this.storage.saveData(this.cards);
+            // Convert Card instances to plain objects for storage
+            const dataToSave = this.cards.map(card => card.toJSON());
+            await this.storage.saveData(dataToSave);
         } catch (e) {
             alert(`Save failed: ${e.message}`);
         } finally {
@@ -156,7 +166,43 @@ class BenefitTrackerApp {
         }
     }
 
+    // ==================== TYPE CHECK HELPERS ====================
+
+    /**
+     * Helper to check if a benefit is a carryover benefit.
+     * Works with both Benefit instances and plain objects.
+     * @param {Benefit|Object} benefit
+     * @returns {boolean}
+     */
+    _isCarryoverBenefit(benefit) {
+        return benefit.isCarryoverBenefit 
+            ? benefit.isCarryoverBenefit() 
+            : benefit.isCarryover === true;
+    }
+
+    /**
+     * Helper to check if a benefit is a one-time benefit.
+     * Works with both Benefit instances and plain objects.
+     * @param {Benefit|Object} benefit
+     * @returns {boolean}
+     */
+    _isOneTimeBenefit(benefit) {
+        return benefit.isOneTime 
+            ? benefit.isOneTime() 
+            : benefit.frequency === 'one-time';
+    }
+
+    /**
+     * Checks if auto-claim is active for a benefit.
+     * Delegates to Benefit.isAutoClaimActive().
+     * @param {Benefit|Object} benefit - The benefit instance or object
+     * @returns {boolean}
+     */
     isAutoClaimActive(benefit) {
+        if (benefit instanceof Benefit) {
+            return benefit.isAutoClaimActive(this.today);
+        }
+        // Fallback for plain objects
         if (benefit.frequency === 'one-time') return false;
         if (benefit.autoClaim !== true) return false;
         if (!benefit.autoClaimEndDate) return false;
@@ -165,7 +211,17 @@ class BenefitTrackerApp {
         return endDate >= this.today;
     }
 
+    /**
+     * Checks if a benefit is ignored.
+     * Delegates to Benefit.isIgnoredActive().
+     * @param {Benefit|Object} benefit - The benefit instance or object
+     * @returns {boolean}
+     */
     isIgnoredActive(benefit) {
+        if (benefit instanceof Benefit) {
+            return benefit.isIgnoredActive(this.today);
+        }
+        // Fallback for plain objects
         if (benefit.frequency === 'one-time') return false;
         if (benefit.ignored !== true) return false;
         if (!benefit.ignoredEndDate) return false;
@@ -176,47 +232,67 @@ class BenefitTrackerApp {
 
     /**
      * Checks if a carryover benefit has any earned instances available.
-     * @param {Object} benefit - The benefit object
+     * Delegates to Benefit.hasActiveCarryoverInstances().
+     * @param {Benefit|Object} benefit - The benefit object
      * @returns {boolean} True if the benefit has at least one active earned instance
      */
     isCarryoverEarned(benefit) {
+        if (benefit instanceof Benefit) {
+            return benefit.hasActiveCarryoverInstances(this.today);
+        }
         if (!benefit.isCarryover) return false;
         return DateUtils.hasActiveCarryoverInstance(benefit, this.today);
     }
 
     /**
      * Checks if a carryover benefit can be earned in the current year.
-     * @param {Object} benefit - The benefit object
+     * Delegates to Benefit.canEarnCarryoverThisYear().
+     * @param {Benefit|Object} benefit - The benefit object
      * @returns {boolean} True if the benefit can still be earned this year
      */
     canEarnCarryoverThisYear(benefit) {
+        if (benefit instanceof Benefit) {
+            return benefit.canEarnCarryoverThisYear(this.today);
+        }
         return DateUtils.canEarnCarryoverThisYear(benefit, this.today);
     }
 
     /**
      * Gets all active (non-expired) earned instances for a carryover benefit.
-     * @param {Object} benefit - The benefit object
+     * Delegates to Benefit.getActiveCarryoverInstances().
+     * @param {Benefit|Object} benefit - The benefit object
      * @returns {Array} Array of active earned instances
      */
     getActiveCarryoverInstances(benefit) {
+        if (benefit instanceof Benefit) {
+            return benefit.getActiveCarryoverInstances(this.today);
+        }
         return DateUtils.getActiveCarryoverInstances(benefit, this.today);
     }
 
     /**
      * Gets the total remaining credit across all active earned instances.
-     * @param {Object} benefit - The benefit object
+     * Delegates to Benefit.getTotalCarryoverRemaining().
+     * @param {Benefit|Object} benefit - The benefit object
      * @returns {number} Total remaining credit
      */
     getTotalCarryoverRemaining(benefit) {
+        if (benefit instanceof Benefit) {
+            return benefit.getTotalCarryoverRemaining(this.today);
+        }
         return DateUtils.getTotalCarryoverRemaining(benefit, this.today);
     }
 
     /**
      * Gets the expiry date for the earliest expiring active instance.
-     * @param {Object} benefit - The benefit object
+     * Delegates to Benefit.getCarryoverExpiryDate().
+     * @param {Benefit|Object} benefit - The benefit object
      * @returns {Date|null} The earliest expiry date or null if no active instances
      */
     getCarryoverExpiryDate(benefit) {
+        if (benefit instanceof Benefit) {
+            return benefit.getCarryoverExpiryDate(this.today);
+        }
         if (!benefit.isCarryover) return null;
         const activeInstances = this.getActiveCarryoverInstances(benefit);
         if (activeInstances.length === 0) return null;
@@ -237,7 +313,7 @@ class BenefitTrackerApp {
         this.cards.forEach(card => {
             card.benefits.forEach(benefit => {
                 // Handle carryover benefits separately
-                if (benefit.isCarryover) {
+                if (this._isCarryoverBenefit(benefit)) {
                     // Migrate legacy single earnedDate to earnedInstances array
                     if (benefit.earnedDate && !benefit.earnedInstances) {
                         benefit.earnedInstances = [{
@@ -255,7 +331,7 @@ class BenefitTrackerApp {
                     }
 
                     // Check if earn progress resets (new calendar year)
-                    const resetDate = DateUtils.getCarryoverResetDate(this.today);
+                    const resetDate = CarryoverCycle.getResetDate(this.today);
                     const lastEarnReset = benefit.lastEarnReset ? new Date(benefit.lastEarnReset) : null;
                     
                     if (!lastEarnReset || lastEarnReset < resetDate) {
@@ -265,10 +341,11 @@ class BenefitTrackerApp {
                         stateChanged = true;
                     }
 
-                    // Remove expired instances using DateUtils method
-                    const activeInstances = benefit.earnedInstances.filter(instance => 
-                        DateUtils.isCarryoverInstanceActive(instance, this.today)
-                    );
+                    // Remove expired instances
+                    const carryoverCycle = new CarryoverCycle({
+                        earnedInstances: benefit.earnedInstances
+                    });
+                    const activeInstances = carryoverCycle.getActiveInstances(this.today);
                     
                     if (activeInstances.length !== benefit.earnedInstances.length) {
                         benefit.earnedInstances = activeInstances;
@@ -278,14 +355,17 @@ class BenefitTrackerApp {
                     return; // Don't process as regular benefit
                 }
 
-                if (benefit.frequency === 'one-time') return;
+                if (this._isOneTimeBenefit(benefit)) return;
 
                 if (this.isAutoClaimActive(benefit) && benefit.usedAmount < benefit.totalAmount) {
                     benefit.usedAmount = benefit.totalAmount;
                     stateChanged = true;
                 }
 
-                const nextReset = DateUtils.calculateNextResetDate(benefit, card, this.today);
+                // Use Benefit method if available, otherwise use DateUtils
+                const nextReset = benefit.getNextResetDate 
+                    ? benefit.getNextResetDate(this.today)
+                    : DateUtils.calculateNextResetDate(benefit, card, this.today);
 
                 if (nextReset <= this.today) {
                     if (this.isAutoClaimActive(benefit)) {
@@ -376,8 +456,13 @@ class BenefitTrackerApp {
 
         const card = this.cards.find(c => c.id === cardId);
         if (card) {
-            const [movedBenefit] = card.benefits.splice(oldIndex, 1);
-            card.benefits.splice(newIndex, 0, movedBenefit);
+            // Use Card method if available
+            if (card.reorderBenefits) {
+                card.reorderBenefits(oldIndex, newIndex);
+            } else {
+                const [movedBenefit] = card.benefits.splice(oldIndex, 1);
+                card.benefits.splice(newIndex, 0, movedBenefit);
+            }
             this.saveState();
         }
     }
@@ -418,15 +503,15 @@ class BenefitTrackerApp {
         this.cards.forEach(card => {
             card.benefits.forEach(benefit => {
                 // Handle carryover benefits separately - each earned instance can expire
-                if (benefit.isCarryover) {
+                if (this._isCarryoverBenefit(benefit)) {
                     const activeInstances = this.getActiveCarryoverInstances(benefit);
                     activeInstances.forEach((instance, index) => {
-                        const expiryDate = DateUtils.calculateCarryoverExpiryDate(instance.earnedDate);
+                        const expiryDate = CarryoverCycle.calculateExpiryDate(instance.earnedDate);
                         const rem = benefit.totalAmount - (instance.usedAmount || 0);
                         
                         // Only show in expiring list if the expiry is within the limit
                         if (expiryDate > this.today && expiryDate <= limitDate) {
-                            const earnYear = DateUtils.getEarnYear(instance.earnedDate);
+                            const earnYear = CarryoverCycle.getEarnYear(instance.earnedDate);
                             const item = {
                                 cardName: card.name, 
                                 benefit: benefit, 
@@ -448,9 +533,12 @@ class BenefitTrackerApp {
                 }
 
                 const rem = benefit.totalAmount - benefit.usedAmount;
-                if (benefit.frequency === 'one-time') return;
+                if (this._isOneTimeBenefit(benefit)) return;
 
-                const next = DateUtils.calculateNextResetDate(benefit, card, this.today);
+                // Use Benefit method if available
+                const next = benefit.getNextResetDate 
+                    ? benefit.getNextResetDate(this.today)
+                    : DateUtils.calculateNextResetDate(benefit, card, this.today);
 
                 if (next > this.today && next <= limitDate) {
                     const item = {cardName: card.name, benefit: benefit, remainingAmount: rem, nextResetDate: next};
@@ -478,7 +566,10 @@ class BenefitTrackerApp {
         if (this.cards.length === 0) this.cardListContainer.innerHTML = '<p>No cards added yet.</p>';
 
         this.cards.forEach(card => {
-            const allUsed = card.benefits.length > 0 && card.benefits.every(b => (b.totalAmount - b.usedAmount) <= 0);
+            // Use Card method if available
+            const allUsed = card.isAllBenefitsUsed 
+                ? card.isAllBenefitsUsed(this.today)
+                : (card.benefits.length > 0 && card.benefits.every(b => (b.totalAmount - b.usedAmount) <= 0));
             let isCardCollapsed = allUsed;
             if (cardState.has(card.id)) {
                 isCardCollapsed = cardState.get(card.id);
@@ -490,7 +581,10 @@ class BenefitTrackerApp {
 
             if (card.benefits.length > 0) {
                 card.benefits.forEach(benefit => {
-                    const isUsed = (benefit.totalAmount - benefit.usedAmount) <= 0;
+                    // Use Benefit method if available
+                    const isUsed = benefit.isFullyUsed 
+                        ? benefit.isFullyUsed(this.today)
+                        : (benefit.totalAmount - benefit.usedAmount) <= 0;
                     const isIgnored = this.isIgnoredActive(benefit);
                     let isBenefitCollapsed = isUsed || isIgnored;
 
@@ -515,12 +609,15 @@ class BenefitTrackerApp {
         const name = this.newCardNameInput.value.trim();
         const date = this.newCardAnniversaryInput.value;
         if (!name || !date) return;
-        this.cards.push({
+        
+        // Create a new Card instance
+        const newCard = new Card({
             id: `card-${Math.random().toString(36).substr(2, 9)}`,
             name: name,
             anniversaryDate: date,
             benefits: []
         });
+        this.cards.push(newCard);
         this.saveState();
         this.render();
         this.newCardNameInput.value = '';
@@ -539,7 +636,7 @@ class BenefitTrackerApp {
     handleAddBenefit(cardId, data) {
         const card = this.cards.find(c => c.id === cardId);
         if (card) {
-            const newBenefit = {
+            const benefitData = {
                 id: `benefit-${Math.random().toString(36).substr(2, 9)}`,
                 ...data,
                 usedAmount: 0,
@@ -547,10 +644,19 @@ class BenefitTrackerApp {
             };
             
             // Handle carryover benefits
-            if (newBenefit.isCarryover) {
-                newBenefit.earnProgress = newBenefit.earnProgress || 0;
-                newBenefit.earnedInstances = []; // Use new array format
-                newBenefit.lastEarnReset = DateUtils.getCarryoverResetDate(this.today).toISOString();
+            if (benefitData.isCarryover) {
+                benefitData.earnProgress = benefitData.earnProgress || 0;
+                benefitData.earnedInstances = []; // Use new array format
+                benefitData.lastEarnReset = CarryoverCycle.getResetDate(this.today).toISOString();
+            }
+            
+            // Use Card.addBenefit if available
+            let newBenefit;
+            if (card.addBenefit) {
+                newBenefit = card.addBenefit(benefitData);
+            } else {
+                newBenefit = Benefit.fromJSON(benefitData, card.anniversaryDate);
+                card.benefits.push(newBenefit);
             }
             
             if (this.isAutoClaimActive(newBenefit)) {
@@ -560,7 +666,6 @@ class BenefitTrackerApp {
                 newBenefit.ignored = false;
                 newBenefit.ignoredEndDate = null;
             }
-            card.benefits.push(newBenefit);
             this.saveState();
             this.render();
         }
@@ -568,11 +673,16 @@ class BenefitTrackerApp {
 
     handleUpdateBenefitUsage(bId, val) {
         for (const c of this.cards) {
-            const b = c.benefits.find(ben => ben.id === bId);
+            const b = c.findBenefit ? c.findBenefit(bId) : c.benefits.find(ben => ben.id === bId);
             if (b) {
-                if (isNaN(val) || val < 0) val = 0;
-                if (val > b.totalAmount) val = b.totalAmount;
-                b.usedAmount = val;
+                // Use Benefit method if available
+                if (b.setUsedAmount) {
+                    b.setUsedAmount(val);
+                } else {
+                    if (isNaN(val) || val < 0) val = 0;
+                    if (val > b.totalAmount) val = b.totalAmount;
+                    b.usedAmount = val;
+                }
                 this.saveState();
                 // Note: render() re-inits sortables, which is fine.
                 this.render();
@@ -589,23 +699,28 @@ class BenefitTrackerApp {
      */
     handleUpdateEarnProgress(bId, val) {
         for (const c of this.cards) {
-            const b = c.benefits.find(ben => ben.id === bId);
-            if (b && b.isCarryover) {
-                if (isNaN(val) || val < 0) val = 0;
-                b.earnProgress = val;
-                
-                // Initialize earnedInstances if needed
-                if (!b.earnedInstances) {
-                    b.earnedInstances = [];
-                }
-                
-                // Check if threshold is met and not already earned this year
-                if (val >= b.earnThreshold && this.canEarnCarryoverThisYear(b)) {
-                    // Add new earned instance
-                    b.earnedInstances.push({
-                        earnedDate: this.today.toISOString(),
-                        usedAmount: 0
-                    });
+            const b = c.findBenefit ? c.findBenefit(bId) : c.benefits.find(ben => ben.id === bId);
+            if (b && this._isCarryoverBenefit(b)) {
+                // Use Benefit method if available
+                if (b.setEarnProgress) {
+                    b.setEarnProgress(val, this.today);
+                } else {
+                    if (isNaN(val) || val < 0) val = 0;
+                    b.earnProgress = val;
+                    
+                    // Initialize earnedInstances if needed
+                    if (!b.earnedInstances) {
+                        b.earnedInstances = [];
+                    }
+                    
+                    // Check if threshold is met and not already earned this year
+                    if (val >= b.earnThreshold && this.canEarnCarryoverThisYear(b)) {
+                        // Add new earned instance
+                        b.earnedInstances.push({
+                            earnedDate: this.today.toISOString(),
+                            usedAmount: 0
+                        });
+                    }
                 }
                 
                 this.saveState();
@@ -623,11 +738,16 @@ class BenefitTrackerApp {
      */
     handleUpdateCarryoverInstanceUsage(bId, instanceIndex, val) {
         for (const c of this.cards) {
-            const b = c.benefits.find(ben => ben.id === bId);
-            if (b && b.isCarryover && b.earnedInstances && b.earnedInstances[instanceIndex]) {
-                if (isNaN(val) || val < 0) val = 0;
-                if (val > b.totalAmount) val = b.totalAmount;
-                b.earnedInstances[instanceIndex].usedAmount = val;
+            const b = c.findBenefit ? c.findBenefit(bId) : c.benefits.find(ben => ben.id === bId);
+            if (b && this._isCarryoverBenefit(b) && b.earnedInstances && b.earnedInstances[instanceIndex]) {
+                // Use Benefit method if available
+                if (b.setCarryoverInstanceUsage) {
+                    b.setCarryoverInstanceUsage(instanceIndex, val);
+                } else {
+                    if (isNaN(val) || val < 0) val = 0;
+                    if (val > b.totalAmount) val = b.totalAmount;
+                    b.earnedInstances[instanceIndex].usedAmount = val;
+                }
                 this.saveState();
                 this.render();
                 return;
@@ -638,12 +758,21 @@ class BenefitTrackerApp {
     handleDeleteBenefit(bId) {
         if (!confirm('Delete benefit?')) return;
         for (const c of this.cards) {
-            const idx = c.benefits.findIndex(ben => ben.id === bId);
-            if (idx > -1) {
-                c.benefits.splice(idx, 1);
-                this.saveState();
-                this.render();
-                return;
+            // Use Card method if available
+            if (c.removeBenefit) {
+                if (c.removeBenefit(bId)) {
+                    this.saveState();
+                    this.render();
+                    return;
+                }
+            } else {
+                const idx = c.benefits.findIndex(ben => ben.id === bId);
+                if (idx > -1) {
+                    c.benefits.splice(idx, 1);
+                    this.saveState();
+                    this.render();
+                    return;
+                }
             }
         }
     }
@@ -651,8 +780,13 @@ class BenefitTrackerApp {
     handleUpdateCard(id, name, date) {
         const c = this.cards.find(card => card.id === id);
         if (c) {
-            c.name = name;
-            c.anniversaryDate = date;
+            // Use Card method if available
+            if (c.update) {
+                c.update(name, date);
+            } else {
+                c.name = name;
+                c.anniversaryDate = date;
+            }
             this.saveState();
         }
         this.render();
@@ -660,9 +794,14 @@ class BenefitTrackerApp {
 
     handleUpdateBenefit(bId, data) {
         for (const c of this.cards) {
-            const b = c.benefits.find(ben => ben.id === bId);
+            const b = c.findBenefit ? c.findBenefit(bId) : c.benefits.find(ben => ben.id === bId);
             if (b) {
-                Object.assign(b, data);
+                // Use Benefit method if available
+                if (b.update) {
+                    b.update(data);
+                } else {
+                    Object.assign(b, data);
+                }
                 if (b.autoClaim && b.ignored) {
                     b.ignored = false;
                     b.ignoredEndDate = null;
