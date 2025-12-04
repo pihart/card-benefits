@@ -167,7 +167,7 @@ const DateUtils = {
         
         // Get anniversary date from card
         const anniversaryDate = card instanceof Card 
-            ? card.anniversaryDate 
+            ? card.getAnniversaryDate() 
             : card.anniversaryDate;
         
         // Use ExpiryCycle for calculation

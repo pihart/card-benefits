@@ -166,6 +166,32 @@ class BenefitTrackerApp {
         }
     }
 
+    // ==================== TYPE CHECK HELPERS ====================
+
+    /**
+     * Helper to check if a benefit is a carryover benefit.
+     * Works with both Benefit instances and plain objects.
+     * @param {Benefit|Object} benefit
+     * @returns {boolean}
+     */
+    _isCarryoverBenefit(benefit) {
+        return benefit.isCarryoverBenefit 
+            ? benefit.isCarryoverBenefit() 
+            : benefit.isCarryover === true;
+    }
+
+    /**
+     * Helper to check if a benefit is a one-time benefit.
+     * Works with both Benefit instances and plain objects.
+     * @param {Benefit|Object} benefit
+     * @returns {boolean}
+     */
+    _isOneTimeBenefit(benefit) {
+        return benefit.isOneTime 
+            ? benefit.isOneTime() 
+            : benefit.frequency === 'one-time';
+    }
+
     /**
      * Checks if auto-claim is active for a benefit.
      * Delegates to Benefit.isAutoClaimActive().
@@ -287,7 +313,7 @@ class BenefitTrackerApp {
         this.cards.forEach(card => {
             card.benefits.forEach(benefit => {
                 // Handle carryover benefits separately
-                if (benefit.isCarryoverBenefit ? benefit.isCarryoverBenefit() : benefit.isCarryover) {
+                if (this._isCarryoverBenefit(benefit)) {
                     // Migrate legacy single earnedDate to earnedInstances array
                     if (benefit.earnedDate && !benefit.earnedInstances) {
                         benefit.earnedInstances = [{
@@ -329,8 +355,7 @@ class BenefitTrackerApp {
                     return; // Don't process as regular benefit
                 }
 
-                const isOneTime = benefit.isOneTime ? benefit.isOneTime() : (benefit.frequency === 'one-time');
-                if (isOneTime) return;
+                if (this._isOneTimeBenefit(benefit)) return;
 
                 if (this.isAutoClaimActive(benefit) && benefit.usedAmount < benefit.totalAmount) {
                     benefit.usedAmount = benefit.totalAmount;
@@ -478,8 +503,7 @@ class BenefitTrackerApp {
         this.cards.forEach(card => {
             card.benefits.forEach(benefit => {
                 // Handle carryover benefits separately - each earned instance can expire
-                const isCarryover = benefit.isCarryoverBenefit ? benefit.isCarryoverBenefit() : benefit.isCarryover;
-                if (isCarryover) {
+                if (this._isCarryoverBenefit(benefit)) {
                     const activeInstances = this.getActiveCarryoverInstances(benefit);
                     activeInstances.forEach((instance, index) => {
                         const expiryDate = CarryoverCycle.calculateExpiryDate(instance.earnedDate);
@@ -509,8 +533,7 @@ class BenefitTrackerApp {
                 }
 
                 const rem = benefit.totalAmount - benefit.usedAmount;
-                const isOneTime = benefit.isOneTime ? benefit.isOneTime() : (benefit.frequency === 'one-time');
-                if (isOneTime) return;
+                if (this._isOneTimeBenefit(benefit)) return;
 
                 // Use Benefit method if available
                 const next = benefit.getNextResetDate 
@@ -677,8 +700,7 @@ class BenefitTrackerApp {
     handleUpdateEarnProgress(bId, val) {
         for (const c of this.cards) {
             const b = c.findBenefit ? c.findBenefit(bId) : c.benefits.find(ben => ben.id === bId);
-            const isCarryover = b && (b.isCarryoverBenefit ? b.isCarryoverBenefit() : b.isCarryover);
-            if (b && isCarryover) {
+            if (b && this._isCarryoverBenefit(b)) {
                 // Use Benefit method if available
                 if (b.setEarnProgress) {
                     b.setEarnProgress(val, this.today);
@@ -717,8 +739,7 @@ class BenefitTrackerApp {
     handleUpdateCarryoverInstanceUsage(bId, instanceIndex, val) {
         for (const c of this.cards) {
             const b = c.findBenefit ? c.findBenefit(bId) : c.benefits.find(ben => ben.id === bId);
-            const isCarryover = b && (b.isCarryoverBenefit ? b.isCarryoverBenefit() : b.isCarryover);
-            if (b && isCarryover && b.earnedInstances && b.earnedInstances[instanceIndex]) {
+            if (b && this._isCarryoverBenefit(b) && b.earnedInstances && b.earnedInstances[instanceIndex]) {
                 // Use Benefit method if available
                 if (b.setCarryoverInstanceUsage) {
                     b.setCarryoverInstanceUsage(instanceIndex, val);

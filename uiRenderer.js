@@ -6,6 +6,32 @@ class UIRenderer {
         this.app = app; // Reference to the main controller
     }
 
+    // ==================== TYPE CHECK HELPERS ====================
+
+    /**
+     * Helper to check if a benefit is a carryover benefit.
+     * Works with both Benefit instances and plain objects.
+     * @param {Benefit|Object} benefit
+     * @returns {boolean}
+     */
+    _isCarryoverBenefit(benefit) {
+        return benefit.isCarryoverBenefit 
+            ? benefit.isCarryoverBenefit() 
+            : benefit.isCarryover === true;
+    }
+
+    /**
+     * Helper to check if a benefit is a one-time benefit.
+     * Works with both Benefit instances and plain objects.
+     * @param {Benefit|Object} benefit
+     * @returns {boolean}
+     */
+    _isOneTimeBenefit(benefit) {
+        return benefit.isOneTime 
+            ? benefit.isOneTime() 
+            : benefit.frequency === 'one-time';
+    }
+
     // ... (renderExpiringSoon unchanged) ...
     renderExpiringSoon(activeItems, ignoredItems, fullyUsedItems, days, mainOpen, isIgnoredOpen, isFullyUsedOpen) {
         const activeList = document.getElementById('expiring-active-list');
@@ -20,10 +46,8 @@ class UIRenderer {
             const benefitDesc = item.earnYear 
                 ? `${item.benefit.description} (${item.earnYear})` 
                 : item.benefit.description;
-            // Check if carryover using method or property
-            const isCarryover = item.benefit.isCarryoverBenefit 
-                ? item.benefit.isCarryoverBenefit() 
-                : item.benefit.isCarryover;
+            // Check if carryover using helper
+            const isCarryover = this._isCarryoverBenefit(item.benefit);
             const dateLabel = isCarryover ? 'Expires' : 'Resets';
             li.innerHTML = `
                 <span class="expiring-item-amount" style="${isFull ? 'color:var(--success)' : ''}">
@@ -190,10 +214,8 @@ class UIRenderer {
 
         const isAutoClaimed = this.app.isAutoClaimActive(benefit);
         const isIgnored = this.app.isIgnoredActive(benefit);
-        // Check carryover using method or property
-        const isCarryover = benefit.isCarryoverBenefit 
-            ? benefit.isCarryoverBenefit() 
-            : benefit.isCarryover === true;
+        // Check carryover using helper
+        const isCarryover = this._isCarryoverBenefit(benefit);
         
         // For carryover benefits, get active instances
         const activeInstances = isCarryover ? this.app.getActiveCarryoverInstances(benefit) : [];
@@ -347,9 +369,8 @@ class UIRenderer {
             }
             nextResetDiv.innerHTML = dateInfo.join('<br>');
         } else {
-            // Check if one-time using method or property
-            const isOneTime = benefit.isOneTime ? benefit.isOneTime() : (benefit.frequency === 'one-time');
-            if (!isOneTime) {
+            // Check if one-time using helper
+            if (!this._isOneTimeBenefit(benefit)) {
                 // Use Benefit method if available
                 const nextResetDate = benefit.getNextResetDate 
                     ? benefit.getNextResetDate(this.app.today)
@@ -850,14 +871,9 @@ class UIRenderer {
         form.style.marginBottom = '0';
         const uId = Math.random().toString(36).substr(2, 9);
 
-        // Check carryover using method or property
-        const isCarryover = benefit.isCarryoverBenefit 
-            ? benefit.isCarryoverBenefit() 
-            : benefit.isCarryover === true;
-        // Check one-time using method or property
-        const isOneTime = benefit.isOneTime 
-            ? benefit.isOneTime() 
-            : benefit.frequency === 'one-time';
+        // Check carryover and one-time using helpers
+        const isCarryover = this._isCarryoverBenefit(benefit);
+        const isOneTime = this._isOneTimeBenefit(benefit);
         const isRecurring = !isOneTime && !isCarryover;
         const hasAutoClaim = benefit.autoClaim === true;
         const hasIgnored = benefit.ignored === true;
