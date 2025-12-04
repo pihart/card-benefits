@@ -830,11 +830,16 @@ class UIRenderer {
                 statusSpan.style.color = isUsed ? 'var(--success)' : 'var(--danger)';
                 statusSpan.textContent = `$${remaining.toFixed(2)} remaining`;
             } else if (canEarnThisYear) {
-                // Show earn progress status
-                statusSpan.style.color = 'var(--warning)';
-                const earnProgress = benefit.earnProgress || 0;
-                const earnThreshold = benefit.earnThreshold || 0;
-                statusSpan.textContent = `$${earnProgress.toFixed(2)} / $${earnThreshold.toFixed(2)} to earn`;
+                // Carryover can earn - check for linked minimum spend
+                if (benefit.requiredMinimumSpendId) {
+                    // Has a linked minimum spend - show that the benefit will be earned when met
+                    statusSpan.style.color = 'var(--warning)';
+                    statusSpan.textContent = 'Pending minimum spend...';
+                } else {
+                    // No linked minimum spend - can't earn
+                    statusSpan.style.color = 'var(--secondary-color)';
+                    statusSpan.textContent = 'Link to minimum spend to earn';
+                }
             } else {
                 statusSpan.style.color = 'var(--secondary-color)';
                 statusSpan.textContent = 'No active credits';
@@ -866,7 +871,11 @@ class UIRenderer {
                 const totalCredit = activeInstances.length * benefit.totalAmount;
                 metaText = `($${totalUsed.toFixed(2)} / $${totalCredit.toFixed(2)}) - ${activeInstances.length} carryover credit(s)`;
             } else if (canEarnThisYear) {
-                metaText = `Earn $${benefit.earnThreshold.toFixed(2)} spend to unlock $${benefit.totalAmount.toFixed(2)} credit`;
+                if (benefit.requiredMinimumSpendId) {
+                    metaText = `Carryover benefit - pending minimum spend requirement`;
+                } else {
+                    metaText = `Carryover benefit - link to minimum spend to earn $${benefit.totalAmount.toFixed(2)} credit`;
+                }
             } else {
                 metaText = `Carryover benefit - no active credits`;
             }
@@ -885,12 +894,17 @@ class UIRenderer {
             const minSpendTarget = lockedByMinSpend.targetAmount || 1;
             const minSpendPercent = Math.min((minSpendProgress / minSpendTarget) * 100, 100);
             progressContainer.innerHTML = `<div class="progress-bar-inner" style="width: ${minSpendPercent}%; background-color: var(--secondary-color);"></div>`;
-        } else if (isCarryover && canEarnThisYear && !hasEarnedInstances) {
-            // Earn progress bar (only show when earning and no earned instances)
-            const earnProgress = benefit.earnProgress || 0;
-            const earnThreshold = benefit.earnThreshold || 1;
-            const earnPercent = Math.min((earnProgress / earnThreshold) * 100, 100);
-            progressContainer.innerHTML = `<div class="progress-bar-inner" style="width: ${earnPercent}%; background-color: var(--warning);"></div>`;
+        } else if (isCarryover && canEarnThisYear && !hasEarnedInstances && benefit.requiredMinimumSpendId) {
+            // Show linked minimum spend progress for carryover benefits
+            const linkedMinSpend = this.app.getMinimumSpendById(benefit.requiredMinimumSpendId);
+            if (linkedMinSpend) {
+                const minSpendProgress = linkedMinSpend.currentAmount || 0;
+                const minSpendTarget = linkedMinSpend.targetAmount || 1;
+                const minSpendPercent = Math.min((minSpendProgress / minSpendTarget) * 100, 100);
+                progressContainer.innerHTML = `<div class="progress-bar-inner" style="width: ${minSpendPercent}%; background-color: var(--warning);"></div>`;
+            } else {
+                progressContainer.innerHTML = `<div class="progress-bar-inner" style="width: 0%;"></div>`;
+            }
         } else {
             // Normal usage progress bar
             progressContainer.innerHTML = `<div class="progress-bar-inner" style="width: ${progressPercent}%; background-color: ${isUsed ? 'var(--success)' : 'var(--primary-color)'};"></div>`;
@@ -941,75 +955,8 @@ class UIRenderer {
         const controlsDiv = document.createElement('div');
         controlsDiv.className = 'benefit-controls';
         
-        // For carryover benefits, show earn progress and/or instance usage controls
+        // For carryover benefits, show instance usage controls (earn progress is now managed via MinimumSpend)
         if (isCarryover) {
-            // Show earn progress controls if can still earn this year
-            if (canEarnThisYear) {
-                const earnLabel = document.createElement('label');
-                earnLabel.textContent = 'Spend progress: $';
-
-                const earnInputWrapper = document.createElement('div');
-                earnInputWrapper.className = 'smart-input-wrapper';
-                const earnDecBtn = document.createElement('button');
-                earnDecBtn.className = 'smart-stepper-btn';
-                earnDecBtn.textContent = '−';
-                earnDecBtn.tabIndex = -1;
-                const earnInput = document.createElement('input');
-                earnInput.type = 'number';
-                earnInput.value = (benefit.earnProgress || 0).toFixed(2);
-                earnInput.min = "0";
-                earnInput.step = "0.01";
-                const earnIncBtn = document.createElement('button');
-                earnIncBtn.className = 'smart-stepper-btn';
-                earnIncBtn.textContent = '+';
-                earnIncBtn.tabIndex = -1;
-
-                const getEarnSmartStep = () => {
-                    if (benefit.earnThreshold >= 1000) return 50;
-                    if (benefit.earnThreshold >= 200) return 10;
-                    if (benefit.earnThreshold >= 10) return 1;
-                    return 0.01;
-                };
-                const handleEarnSmartIncrement = (direction) => {
-                    const step = getEarnSmartStep();
-                    let current = parseFloat(earnInput.value) || 0;
-                    let nextVal;
-                    if (direction === 'up') {
-                        nextVal = (Math.floor(current / step) + 1) * step;
-                    } else {
-                        if (current % step === 0) nextVal = current - step;
-                        else nextVal = Math.ceil(current / step) * step - step;
-                    }
-                    if (nextVal < 0) nextVal = 0;
-                    nextVal = parseFloat(nextVal.toFixed(2));
-                    earnInput.value = nextVal.toFixed(2);
-                    this.app.handleUpdateEarnProgress(benefit.id, nextVal);
-                };
-
-                earnDecBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    handleEarnSmartIncrement('down');
-                };
-                earnIncBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    handleEarnSmartIncrement('up');
-                };
-                earnInput.onfocus = (e) => e.target.select();
-                earnInput.onblur = (e) => {
-                    if (e.target.value === '') e.target.value = (benefit.earnProgress || 0).toFixed(2);
-                };
-                earnInput.onchange = (e) => {
-                    this.app.handleUpdateEarnProgress(benefit.id, parseFloat(e.target.value));
-                };
-
-                earnInputWrapper.appendChild(earnDecBtn);
-                earnInputWrapper.appendChild(earnInput);
-                earnInputWrapper.appendChild(earnIncBtn);
-
-                controlsDiv.appendChild(earnLabel);
-                controlsDiv.appendChild(earnInputWrapper);
-            }
-
             // Show usage controls for each earned instance
             if (hasEarnedInstances) {
                 activeInstances.forEach((instance, index) => {
@@ -1616,20 +1563,17 @@ class UIRenderer {
                 expiryDate: frequency === 'one-time' ? (expiryDateInput.value || null) : null,
                 // Carryover-specific fields
                 isCarryover: isCarryoverSelected,
-                earnThreshold: isCarryoverSelected ? (isNaN(earnThresholdValue) ? 0 : earnThresholdValue) : null,
-                // Minimum spend link
-                requiredMinimumSpendId: minSpendSelect.value || null
+                // Minimum spend link (for both carryover and one-time benefits)
+                requiredMinimumSpendId: (isCarryoverSelected || isOneTimeSelected) ? (minSpendSelect.value || null) : null
             };
             
-            // Preserve existing carryover state if still a carryover benefit
+            // Preserve existing carryover earned instances if still a carryover benefit
             if (isCarryoverSelected && benefit.isCarryover) {
-                newData.earnProgress = benefit.earnProgress || 0;
-                newData.earnedDate = benefit.earnedDate || null;
+                newData.earnedInstances = benefit.earnedInstances || [];
                 newData.lastEarnReset = benefit.lastEarnReset || null;
             } else if (isCarryoverSelected) {
                 // Converting to carryover
-                newData.earnProgress = 0;
-                newData.earnedDate = null;
+                newData.earnedInstances = [];
             }
             
             if (frequency !== 'one-time' && !isCarryoverSelected) {

@@ -354,28 +354,6 @@ class Benefit {
     }
 
     /**
-     * Updates earn progress for carryover benefits.
-     * @param {number} progress
-     * @param {Date} currentDate - Current date for earning new instance
-     * @returns {boolean} True if a new instance was earned
-     */
-    setEarnProgress(progress, currentDate) {
-        if (!this.isCarryoverBenefit()) return false;
-        if (isNaN(progress) || progress < 0) progress = 0;
-        this.earnProgress = progress;
-
-        // Check if threshold is met and can earn this year
-        if (progress >= this.earnThreshold && this.canEarnCarryoverThisYear(currentDate)) {
-            this.earnedInstances.push({
-                earnedDate: currentDate.toISOString(),
-                usedAmount: 0
-            });
-            return true;
-        }
-        return false;
-    }
-
-    /**
      * Updates usage for a specific carryover instance.
      * @param {number} instanceIndex
      * @param {number} amount
