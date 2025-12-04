@@ -265,11 +265,10 @@ class BenefitTrackerApp {
                         stateChanged = true;
                     }
 
-                    // Remove expired instances
-                    const activeInstances = benefit.earnedInstances.filter(instance => {
-                        const expiryDate = DateUtils.calculateCarryoverExpiryDate(instance.earnedDate);
-                        return this.today.getTime() <= expiryDate.getTime();
-                    });
+                    // Remove expired instances using DateUtils method
+                    const activeInstances = benefit.earnedInstances.filter(instance => 
+                        DateUtils.isCarryoverInstanceActive(instance, this.today)
+                    );
                     
                     if (activeInstances.length !== benefit.earnedInstances.length) {
                         benefit.earnedInstances = activeInstances;

@@ -115,7 +115,7 @@ const DateUtils = {
         }
         
         // Check if any instance was already earned this year
-        if (benefit.earnedInstances && Array.isArray(benefit.earnedInstances)) {
+        if (benefit.earnedInstances) {
             const earnedThisYear = benefit.earnedInstances.some(instance => 
                 this.getEarnYear(instance.earnedDate) === currentYear
             );
