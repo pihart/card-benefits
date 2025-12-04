@@ -896,7 +896,7 @@ class UIRenderer {
             progressContainer.innerHTML = `<div class="progress-bar-inner" style="width: ${minSpendPercent}%; background-color: var(--secondary-color);"></div>`;
         } else if (isCarryover && canEarnThisYear && !hasEarnedInstances && benefit.requiredMinimumSpendId) {
             // Show linked minimum spend progress for carryover benefits
-            const linkedMinSpend = this.app.getMinimumSpendById(benefit.requiredMinimumSpendId);
+            const linkedMinSpend = this.app.findMinimumSpend(benefit.requiredMinimumSpendId);
             if (linkedMinSpend) {
                 const minSpendProgress = linkedMinSpend.currentAmount || 0;
                 const minSpendTarget = linkedMinSpend.targetAmount || 1;

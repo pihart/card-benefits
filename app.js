@@ -1043,15 +1043,6 @@ class BenefitTrackerApp {
         return this.findMinimumSpend(minSpendId);
     }
 
-    /**
-     * Gets a minimum spend by ID from any card.
-     * @param {string} minSpendId - The minimum spend ID
-     * @returns {MinimumSpend|null}
-     */
-    getMinimumSpendById(minSpendId) {
-        return this.findMinimumSpend(minSpendId);
-    }
-
     async handleConnectCloud() {
         const url = this.s3UrlInput.value.trim();
         const interval = parseInt(this.pollIntervalInput.value) || 800;
