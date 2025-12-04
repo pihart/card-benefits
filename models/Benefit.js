@@ -22,6 +22,7 @@ class Benefit {
      * @param {number|null} data.earnProgress - Current earning progress for carryover
      * @param {Array|null} data.earnedInstances - Earned instances for carryover
      * @param {string|null} data.lastEarnReset - Last earn reset date for carryover
+     * @param {string|null} data.requiredMinimumSpendId - ID of the minimum spend that must be met to unlock this benefit
      * @param {Date|string|null} anniversaryDate - Card anniversary date (for anniversary-based resets)
      */
     constructor(data, anniversaryDate = null) {
@@ -44,6 +45,9 @@ class Benefit {
         this.earnProgress = data.earnProgress || 0;
         this.earnedInstances = data.earnedInstances || [];
         this.lastEarnReset = data.lastEarnReset || null;
+
+        // Minimum spend precondition - links benefit to a minimum spend requirement
+        this.requiredMinimumSpendId = data.requiredMinimumSpendId || null;
 
         // Store anniversary date for cycle calculations
         this._anniversaryDate = anniversaryDate;
@@ -136,6 +140,30 @@ class Benefit {
      */
     isRecurring() {
         return !this.isOneTime() && !this.isCarryoverBenefit();
+    }
+
+    /**
+     * Checks if this benefit has a required minimum spend.
+     * @returns {boolean}
+     */
+    hasRequiredMinimumSpend() {
+        return this.requiredMinimumSpendId !== null && this.requiredMinimumSpendId !== undefined;
+    }
+
+    /**
+     * Gets the required minimum spend ID.
+     * @returns {string|null}
+     */
+    getRequiredMinimumSpendId() {
+        return this.requiredMinimumSpendId;
+    }
+
+    /**
+     * Sets the required minimum spend ID.
+     * @param {string|null} minSpendId - The minimum spend ID or null to remove requirement
+     */
+    setRequiredMinimumSpendId(minSpendId) {
+        this.requiredMinimumSpendId = minSpendId || null;
     }
 
     /**
@@ -406,7 +434,8 @@ class Benefit {
             earnThreshold: this.earnThreshold,
             earnProgress: this.earnProgress,
             earnedInstances: this.earnedInstances,
-            lastEarnReset: this.lastEarnReset
+            lastEarnReset: this.lastEarnReset,
+            requiredMinimumSpendId: this.requiredMinimumSpendId
         };
         return data;
     }
