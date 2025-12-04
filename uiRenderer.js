@@ -1182,7 +1182,14 @@ class UIRenderer {
     createAddBenefitForm(cardId) {
         const form = document.createElement('form');
         form.className = 'benefit-form';
-        const uId = Math.random().toString(36).substr(2, 9);
+        const uId = Math.random().toString(36).substring(2, 11);
+
+        // Get minimum spends for dropdown
+        const card = this.app.cards.find(c => c.id === cardId);
+        const minSpends = card && card.minimumSpends ? card.minimumSpends : [];
+        const minSpendOptions = minSpends.map(ms => 
+            `<option value="${ms.id}">${ms.description} ($${ms.targetAmount.toFixed(2)})</option>`
+        ).join('');
 
         form.innerHTML = `
             <h3 style="margin: 0; font-size: 1.1rem;">Add New Benefit</h3>
@@ -1221,12 +1228,15 @@ class UIRenderer {
                 </div>
             </div>
             
-            <!-- Carryover Earn Threshold -->
-            <div class="form-row" id="carryover-row-${uId}" style="display:none; border-top:1px dashed #ccc; padding-top:10px;">
+            <!-- Minimum Spend Requirement (for one-time and carryover benefits) -->
+            <div class="form-row" id="min-spend-row-${uId}" style="display:none; border-top:1px dashed #ccc; padding-top:10px;">
                 <div class="form-group">
-                    <label>Earn Threshold (minimum spend to earn)</label>
-                    <input type="number" name="earnThreshold" id="earn-threshold-${uId}" placeholder="3000.00" min="0.01" step="0.01">
-                    <small style="color: #666;">Spend this amount to unlock the credit. Credit is valid until end of next year.</small>
+                    <label>🔗 Required Minimum Spend</label>
+                    <select name="requiredMinimumSpendId" id="min-spend-${uId}">
+                        <option value="">None (no requirement)</option>
+                        ${minSpendOptions}
+                    </select>
+                    <small style="color: #666;">Link this benefit to a minimum spend requirement to unlock it.</small>
                 </div>
             </div>
             
@@ -1269,8 +1279,7 @@ class UIRenderer {
         const resetGroup = form.querySelector(`#reset-group-${uId}`);
         const resetSelect = form.querySelector(`#reset-${uId}`);
 
-        const carryoverRow = form.querySelector(`#carryover-row-${uId}`);
-        const earnThresholdInput = form.querySelector(`#earn-threshold-${uId}`);
+        const minSpendRow = form.querySelector(`#min-spend-row-${uId}`);
 
         const acRow = form.querySelector(`#auto-claim-row-${uId}`);
         const acCheck = form.querySelector(`#ac-check-${uId}`);
@@ -1287,27 +1296,24 @@ class UIRenderer {
             const isCarryover = e.target.value === 'carryover';
             
             if (isCarryover) {
-                // Show carryover-specific fields only
+                // Show carryover-specific fields - use minimum spend for earning
                 resetGroup.style.display = 'none';
                 resetSelect.required = false;
-                carryoverRow.style.display = 'flex';
-                earnThresholdInput.required = true;
+                minSpendRow.style.display = 'flex'; // Show minimum spend dropdown
                 acRow.style.display = 'none';
                 igRow.style.display = 'none';
                 expiryRow.style.display = 'none';
             } else if (isOneTime) {
                 resetGroup.style.display = 'none';
                 resetSelect.required = false;
-                carryoverRow.style.display = 'none';
-                earnThresholdInput.required = false;
+                minSpendRow.style.display = 'flex'; // Show minimum spend dropdown
                 acRow.style.display = 'none';
                 igRow.style.display = 'none';
                 expiryRow.style.display = 'flex';
             } else {
                 resetGroup.style.display = 'block';
                 resetSelect.required = true;
-                carryoverRow.style.display = 'none';
-                earnThresholdInput.required = false;
+                minSpendRow.style.display = 'none';
                 acRow.style.display = 'flex';
                 igRow.style.display = 'flex';
                 expiryRow.style.display = 'none';
@@ -1339,6 +1345,7 @@ class UIRenderer {
             const formData = new FormData(e.target);
             const frequency = formData.get('frequency');
             const isCarryover = frequency === 'carryover';
+            const isOneTime = frequency === 'one-time';
             
             const benefitData = {
                 description: formData.get('description'),
@@ -1352,15 +1359,15 @@ class UIRenderer {
                 expiryDate: frequency === 'one-time' ? (formData.get('expiryDate') || null) : null,
                 // Carryover-specific fields
                 isCarryover: isCarryover,
-                earnThreshold: isCarryover ? parseFloat(formData.get('earnThreshold')) : null,
-                earnProgress: isCarryover ? 0 : null,
-                earnedDate: null
+                earnedDate: null,
+                // Link to minimum spend for earning (for both carryover and one-time)
+                requiredMinimumSpendId: (isCarryover || isOneTime) ? (formData.get('requiredMinimumSpendId') || null) : null
             };
             this.app.handleAddBenefit(cardId, benefitData);
             e.target.reset();
             resetGroup.style.display = 'none';
             acRow.style.display = 'none';
-            carryoverRow.style.display = 'none';
+            minSpendRow.style.display = 'none';
             acDateGroup.style.display = 'none';
             igRow.style.display = 'none';
             igDateGroup.style.display = 'none';
@@ -1377,7 +1384,7 @@ class UIRenderer {
 
         const form = document.createElement('div');
         form.className = 'edit-form';
-        const uId = Math.random().toString(36).substr(2, 9);
+        const uId = Math.random().toString(36).substring(2, 11);
 
         form.innerHTML = `
             <h3 style="margin: 0;">Editing: ${card.name}</h3>
@@ -1483,15 +1490,6 @@ class UIRenderer {
                 </div>
             </div>
 
-            <!-- Carryover Earn Threshold -->
-            <div class="form-row" id="carryover-row-${uId}" style="display:${isCarryover ? 'flex' : 'none'}; border-top:1px dashed #ccc; padding-top:10px;">
-                <div class="form-group">
-                    <label>Earn Threshold (minimum spend to earn)</label>
-                    <input type="number" id="earn-threshold-${uId}" value="${(benefit.earnThreshold || 0).toFixed(2)}" min="0.01" step="0.01" ${isCarryover ? 'required' : ''}>
-                    <small style="color: #666;">Spend this amount to unlock the credit.</small>
-                </div>
-            </div>
-
             <!-- Auto Claim Edit -->
             <div class="form-row" id="auto-claim-row-${uId}" style="display:${isRecurring ? 'flex' : 'none'}; border-top:1px dashed #ccc; padding-top:10px;">
                 <div class="form-group" style="flex-direction:row; align-items:center; gap:10px; flex:0;">
@@ -1537,10 +1535,8 @@ class UIRenderer {
         const resetGroup = document.getElementById(`reset-group-${uId}`);
         const resetSelect = document.getElementById(`reset-${uId}`);
         
+        const minSpendRow = document.getElementById(`min-spend-row-${uId}`);
         const minSpendSelect = document.getElementById(`min-spend-${uId}`);
-        
-        const carryoverRow = document.getElementById(`carryover-row-${uId}`);
-        const earnThresholdInput = document.getElementById(`earn-threshold-${uId}`);
         
         const acRow = document.getElementById(`auto-claim-row-${uId}`);
         const acCheck = document.getElementById(`ac-check-${uId}`);
@@ -1562,24 +1558,21 @@ class UIRenderer {
             if (isCarryoverSelected) {
                 resetGroup.style.display = 'none';
                 resetSelect.required = false;
-                carryoverRow.style.display = 'flex';
-                earnThresholdInput.required = true;
+                minSpendRow.style.display = 'flex'; // Show min spend for carryover
                 acRow.style.display = 'none';
                 igRow.style.display = 'none';
                 expiryRow.style.display = 'none';
             } else if (isOneTimeSelected) {
                 resetGroup.style.display = 'none';
                 resetSelect.required = false;
-                carryoverRow.style.display = 'none';
-                earnThresholdInput.required = false;
+                minSpendRow.style.display = 'flex'; // Show min spend for one-time
                 acRow.style.display = 'none';
                 igRow.style.display = 'none';
                 expiryRow.style.display = 'flex';
             } else {
                 resetGroup.style.display = 'block';
                 resetSelect.required = true;
-                carryoverRow.style.display = 'none';
-                earnThresholdInput.required = false;
+                minSpendRow.style.display = 'none';
                 acRow.style.display = 'flex';
                 igRow.style.display = 'flex';
                 expiryRow.style.display = 'none';
@@ -1609,8 +1602,8 @@ class UIRenderer {
         document.getElementById(`save-${uId}`).onclick = () => {
             const frequency = freqSelect.value;
             const isCarryoverSelected = frequency === 'carryover';
+            const isOneTimeSelected = frequency === 'one-time';
             
-            const earnThresholdValue = parseFloat(earnThresholdInput.value);
             const newData = {
                 description: document.getElementById(`desc-${uId}`).value.trim(),
                 totalAmount: parseFloat(document.getElementById(`amt-${uId}`).value),
