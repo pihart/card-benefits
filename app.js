@@ -324,6 +324,16 @@ class BenefitTrackerApp {
         let stateChanged = false;
 
         this.cards.forEach(card => {
+            // Reset recurring minimum spends if needed
+            if (card.minimumSpends) {
+                card.minimumSpends.forEach(minSpend => {
+                    if (minSpend.shouldReset && minSpend.shouldReset(this.today)) {
+                        minSpend.reset(this.today);
+                        stateChanged = true;
+                    }
+                });
+            }
+
             card.benefits.forEach(benefit => {
                 // Handle carryover benefits separately
                 if (this._isCarryoverBenefit(benefit)) {
@@ -343,14 +353,12 @@ class BenefitTrackerApp {
                         benefit.earnedInstances = [];
                     }
 
-                    // Check if earn progress resets (new calendar year)
+                    // Update lastEarnReset for calendar year tracking
                     const resetDate = CarryoverCycle.getResetDate(this.today);
                     const lastEarnReset = benefit.lastEarnReset ? new Date(benefit.lastEarnReset) : null;
                     
                     if (!lastEarnReset || lastEarnReset < resetDate) {
-                        // New calendar year - reset earn progress
                         benefit.lastEarnReset = resetDate.toISOString();
-                        benefit.earnProgress = 0;
                         stateChanged = true;
                     }
 
@@ -487,6 +495,7 @@ class BenefitTrackerApp {
         const benefitState = new Map();
         let ignoredSectionOpen = false;
         let fullyUsedSectionOpen = false;
+        let minSpendSectionOpen = false;
         let mainWidgetOpen = true;
 
         this.cardListContainer.querySelectorAll('.card').forEach(el => {
@@ -505,15 +514,46 @@ class BenefitTrackerApp {
         const fullyUsedDetails = document.querySelector('.fully-used-section');
         if (fullyUsedDetails && fullyUsedDetails.hasAttribute('open')) fullyUsedSectionOpen = true;
 
+        const minSpendDetails = document.querySelector('.min-spend-section');
+        if (minSpendDetails && minSpendDetails.hasAttribute('open')) minSpendSectionOpen = true;
+
         // 2. Calculate Data
         const expiringActive = [];
         const expiringIgnored = [];
         const expiringFullyUsed = [];
+        const pendingMinSpends = [];
 
         const limitDate = new Date(this.today.getTime());
         limitDate.setDate(this.today.getDate() + this.expiringDays);
 
         this.cards.forEach(card => {
+            // Process minimum spends
+            if (card.minimumSpends) {
+                card.minimumSpends.forEach(minSpend => {
+                    // Only show actionable (not met, not expired, not ignored) minimum spends
+                    const isActionable = minSpend.isActionable 
+                        ? minSpend.isActionable(this.today)
+                        : (!minSpend.isMet && !this.isMinimumSpendIgnored(minSpend));
+                    
+                    if (isActionable) {
+                        const deadline = minSpend.getDeadline 
+                            ? minSpend.getDeadline(this.today)
+                            : null;
+                        
+                        // Only include if deadline is within the limit
+                        if (deadline && deadline > this.today && deadline <= limitDate) {
+                            pendingMinSpends.push({
+                                cardName: card.name,
+                                cardId: card.id,
+                                minSpend: minSpend,
+                                remainingAmount: minSpend.targetAmount - minSpend.currentAmount,
+                                deadline: deadline
+                            });
+                        }
+                    }
+                });
+            }
+
             card.benefits.forEach(benefit => {
                 // Handle carryover benefits separately - each earned instance can expire
                 if (this._isCarryoverBenefit(benefit)) {
@@ -570,9 +610,10 @@ class BenefitTrackerApp {
         expiringActive.sort(sortFn);
         expiringIgnored.sort(sortFn);
         expiringFullyUsed.sort((a, b) => a.nextResetDate - b.nextResetDate);
+        pendingMinSpends.sort((a, b) => a.deadline - b.deadline);
 
         // 3. Render Expiring
-        this.ui.renderExpiringSoon(expiringActive, expiringIgnored, expiringFullyUsed, this.expiringDays, mainWidgetOpen, ignoredSectionOpen, fullyUsedSectionOpen);
+        this.ui.renderExpiringSoon(expiringActive, expiringIgnored, expiringFullyUsed, pendingMinSpends, this.expiringDays, mainWidgetOpen, ignoredSectionOpen, fullyUsedSectionOpen, minSpendSectionOpen);
 
         // 4. Render Cards
         this.cardListContainer.innerHTML = '';
@@ -658,7 +699,6 @@ class BenefitTrackerApp {
             
             // Handle carryover benefits
             if (benefitData.isCarryover) {
-                benefitData.earnProgress = benefitData.earnProgress || 0;
                 benefitData.earnedInstances = []; // Use new array format
                 benefitData.lastEarnReset = CarryoverCycle.getResetDate(this.today).toISOString();
             }
@@ -698,45 +738,6 @@ class BenefitTrackerApp {
                 }
                 this.saveState();
                 // Note: render() re-inits sortables, which is fine.
-                this.render();
-                return;
-            }
-        }
-    }
-
-    /**
-     * Updates the earn progress for a carryover benefit.
-     * When progress reaches the threshold, a new earned instance is created.
-     * @param {string} bId - The benefit ID
-     * @param {number} val - The new earn progress value
-     */
-    handleUpdateEarnProgress(bId, val) {
-        for (const c of this.cards) {
-            const b = c.findBenefit ? c.findBenefit(bId) : c.benefits.find(ben => ben.id === bId);
-            if (b && this._isCarryoverBenefit(b)) {
-                // Use Benefit method if available
-                if (b.setEarnProgress) {
-                    b.setEarnProgress(val, this.today);
-                } else {
-                    if (isNaN(val) || val < 0) val = 0;
-                    b.earnProgress = val;
-                    
-                    // Initialize earnedInstances if needed
-                    if (!b.earnedInstances) {
-                        b.earnedInstances = [];
-                    }
-                    
-                    // Check if threshold is met and not already earned this year
-                    if (val >= b.earnThreshold && this.canEarnCarryoverThisYear(b)) {
-                        // Add new earned instance
-                        b.earnedInstances.push({
-                            earnedDate: this.today.toISOString(),
-                            usedAmount: 0
-                        });
-                    }
-                }
-                
-                this.saveState();
                 this.render();
                 return;
             }
@@ -829,6 +830,230 @@ class BenefitTrackerApp {
                 return;
             }
         }
+    }
+
+    // ==================== MINIMUM SPEND HANDLERS ====================
+
+    /**
+     * Adds a new minimum spend to a card.
+     * @param {string} cardId - The card ID
+     * @param {Object} data - The minimum spend data
+     */
+    handleAddMinimumSpend(cardId, data) {
+        const card = this.cards.find(c => c.id === cardId);
+        if (card) {
+            const minSpendData = {
+                id: `minspend-${Math.random().toString(36).substr(2, 9)}`,
+                ...data,
+                currentAmount: data.currentAmount || 0,
+                isMet: false,
+                metDate: null,
+                lastReset: this.today.toISOString()
+            };
+            
+            if (card.addMinimumSpend) {
+                card.addMinimumSpend(minSpendData);
+            } else {
+                const minSpend = MinimumSpend.fromJSON(minSpendData, card.anniversaryDate);
+                if (!card.minimumSpends) card.minimumSpends = [];
+                card.minimumSpends.push(minSpend);
+            }
+            
+            this.saveState();
+            this.render();
+        }
+    }
+
+    /**
+     * Deletes a minimum spend.
+     * @param {string} minSpendId - The minimum spend ID
+     */
+    handleDeleteMinimumSpend(minSpendId) {
+        if (!confirm('Delete minimum spend? Any linked benefits will be unlinked.')) return;
+        for (const c of this.cards) {
+            if (c.removeMinimumSpend) {
+                if (c.removeMinimumSpend(minSpendId)) {
+                    this.saveState();
+                    this.render();
+                    return;
+                }
+            } else if (c.minimumSpends) {
+                const idx = c.minimumSpends.findIndex(ms => ms.id === minSpendId);
+                if (idx > -1) {
+                    c.minimumSpends.splice(idx, 1);
+                    // Clear references from benefits
+                    c.benefits.forEach(benefit => {
+                        if (benefit.requiredMinimumSpendId === minSpendId) {
+                            benefit.requiredMinimumSpendId = null;
+                        }
+                    });
+                    this.saveState();
+                    this.render();
+                    return;
+                }
+            }
+        }
+    }
+
+    /**
+     * Updates the current spend amount for a minimum spend.
+     * When a minimum spend is met, any linked carryover benefits will earn an instance.
+     * @param {string} minSpendId - The minimum spend ID
+     * @param {number} val - The new current amount
+     */
+    handleUpdateMinimumSpendProgress(minSpendId, val) {
+        for (const c of this.cards) {
+            const ms = c.findMinimumSpend ? c.findMinimumSpend(minSpendId) : 
+                (c.minimumSpends || []).find(m => m.id === minSpendId);
+            if (ms) {
+                const wasMetBefore = ms.isMet;
+                
+                if (ms.setCurrentAmount) {
+                    ms.setCurrentAmount(val, this.today);
+                } else {
+                    if (isNaN(val) || val < 0) val = 0;
+                    ms.currentAmount = val;
+                    if (ms.currentAmount >= ms.targetAmount && !ms.isMet) {
+                        ms.isMet = true;
+                        ms.metDate = this.today.toISOString();
+                    } else if (ms.currentAmount < ms.targetAmount && ms.isMet) {
+                        ms.isMet = false;
+                        ms.metDate = null;
+                    }
+                }
+                
+                // If minimum spend just became met, check for linked carryover benefits
+                if (!wasMetBefore && ms.isMet) {
+                    c.benefits.forEach(benefit => {
+                        if (benefit.requiredMinimumSpendId === minSpendId && 
+                            this._isCarryoverBenefit(benefit) &&
+                            this.canEarnCarryoverThisYear(benefit)) {
+                            // Earn a new carryover instance
+                            if (!benefit.earnedInstances) {
+                                benefit.earnedInstances = [];
+                            }
+                            benefit.earnedInstances.push({
+                                earnedDate: this.today.toISOString(),
+                                usedAmount: 0
+                            });
+                        }
+                    });
+                }
+                
+                this.saveState();
+                this.render();
+                return;
+            }
+        }
+    }
+
+    /**
+     * Updates minimum spend properties.
+     * @param {string} minSpendId - The minimum spend ID
+     * @param {Object} data - The new data
+     */
+    handleUpdateMinimumSpend(minSpendId, data) {
+        for (const c of this.cards) {
+            const ms = c.findMinimumSpend ? c.findMinimumSpend(minSpendId) : 
+                (c.minimumSpends || []).find(m => m.id === minSpendId);
+            if (ms) {
+                if (ms.update) {
+                    ms.update(data);
+                } else {
+                    Object.assign(ms, data);
+                }
+                this.saveState();
+                this.render();
+                return;
+            }
+        }
+    }
+
+    /**
+     * Links a benefit to a minimum spend requirement.
+     * @param {string} benefitId - The benefit ID
+     * @param {string|null} minSpendId - The minimum spend ID to link (or null to unlink)
+     */
+    handleLinkBenefitToMinimumSpend(benefitId, minSpendId) {
+        for (const c of this.cards) {
+            const b = c.findBenefit ? c.findBenefit(benefitId) : c.benefits.find(ben => ben.id === benefitId);
+            if (b) {
+                b.requiredMinimumSpendId = minSpendId || null;
+                this.saveState();
+                this.render();
+                return;
+            }
+        }
+    }
+
+    /**
+     * Gets all minimum spends for a specific card.
+     * @param {string} cardId - The card ID
+     * @returns {Array<MinimumSpend>}
+     */
+    getMinimumSpendsForCard(cardId) {
+        const card = this.cards.find(c => c.id === cardId);
+        if (!card) return [];
+        return card.minimumSpends || [];
+    }
+
+    /**
+     * Finds a minimum spend by ID across all cards.
+     * @param {string} minSpendId - The minimum spend ID
+     * @returns {MinimumSpend|null}
+     */
+    findMinimumSpend(minSpendId) {
+        for (const c of this.cards) {
+            const ms = c.findMinimumSpend ? c.findMinimumSpend(minSpendId) : 
+                (c.minimumSpends || []).find(m => m.id === minSpendId);
+            if (ms) return ms;
+        }
+        return null;
+    }
+
+    /**
+     * Checks if a minimum spend is ignored.
+     * @param {MinimumSpend|Object} minSpend - The minimum spend
+     * @returns {boolean}
+     */
+    isMinimumSpendIgnored(minSpend) {
+        if (minSpend instanceof MinimumSpend) {
+            return minSpend.isIgnoredActive(this.today);
+        }
+        // Fallback for plain objects
+        if (minSpend.frequency === 'one-time') return false;
+        if (minSpend.ignored !== true) return false;
+        if (!minSpend.ignoredEndDate) return false;
+        const endDate = new Date(minSpend.ignoredEndDate);
+        endDate.setHours(0, 0, 0, 0);
+        return endDate >= this.today;
+    }
+
+    /**
+     * Checks if a benefit is locked by an unmet minimum spend.
+     * @param {Benefit|Object} benefit - The benefit
+     * @returns {boolean}
+     */
+    isBenefitLockedByMinimumSpend(benefit) {
+        const minSpendId = benefit.requiredMinimumSpendId;
+        if (!minSpendId) return false;
+        
+        const minSpend = this.findMinimumSpend(minSpendId);
+        if (!minSpend) return false;
+        
+        return !minSpend.isMet;
+    }
+
+    /**
+     * Gets the minimum spend that locks a benefit, if any.
+     * @param {Benefit|Object} benefit - The benefit
+     * @returns {MinimumSpend|null}
+     */
+    getLockedByMinimumSpend(benefit) {
+        const minSpendId = benefit.requiredMinimumSpendId;
+        if (!minSpendId) return null;
+        
+        return this.findMinimumSpend(minSpendId);
     }
 
     async handleConnectCloud() {

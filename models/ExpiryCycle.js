@@ -210,6 +210,75 @@ class ExpiryCycle {
     }
 
     /**
+     * Gets the deadline/end date of the current period.
+     * For recurring cycles, this is the day before the next reset.
+     * For one-time, this returns the deadline if set.
+     * @param {Date} currentDate - The reference date
+     * @param {Date|null} deadline - Optional specific deadline for one-time cycles
+     * @returns {Date|null}
+     */
+    getDeadline(currentDate, deadline = null) {
+        if (this.isOneTime()) {
+            return deadline;
+        }
+        
+        if (!this.isRecurring()) {
+            return null;
+        }
+        
+        // For recurring, deadline is the day before next reset
+        const nextReset = this.calculateNextResetDate(currentDate);
+        if (!nextReset) return null;
+        
+        const periodEnd = new Date(nextReset);
+        periodEnd.setDate(periodEnd.getDate() - 1);
+        return periodEnd;
+    }
+
+    /**
+     * Gets the number of days until the deadline.
+     * @param {Date} currentDate - The reference date
+     * @param {Date|null} deadline - Optional specific deadline for one-time cycles
+     * @returns {number|null}
+     */
+    daysUntilDeadline(currentDate, deadline = null) {
+        const dl = this.getDeadline(currentDate, deadline);
+        if (!dl) return null;
+        
+        const today = new Date(currentDate);
+        today.setHours(0, 0, 0, 0);
+        const diffTime = dl.getTime() - today.getTime();
+        return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    }
+
+    /**
+     * Checks if the deadline is within a given number of days.
+     * @param {Date} currentDate - The reference date
+     * @param {number} days - Number of days to check
+     * @param {Date|null} deadline - Optional specific deadline for one-time cycles
+     * @returns {boolean}
+     */
+    deadlineWithin(currentDate, days, deadline = null) {
+        const daysUntil = this.daysUntilDeadline(currentDate, deadline);
+        return daysUntil !== null && daysUntil > 0 && daysUntil <= days;
+    }
+
+    /**
+     * Checks if the deadline has passed (cycle expired).
+     * @param {Date} currentDate - The reference date
+     * @param {Date|null} deadline - Optional specific deadline for one-time cycles
+     * @returns {boolean}
+     */
+    isDeadlinePassed(currentDate, deadline = null) {
+        const dl = this.getDeadline(currentDate, deadline);
+        if (!dl) return false;
+        
+        const today = new Date(currentDate);
+        today.setHours(0, 0, 0, 0);
+        return today > dl;
+    }
+
+    /**
      * Creates a plain object representation for serialization.
      * @returns {Object}
      */

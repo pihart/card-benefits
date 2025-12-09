@@ -33,7 +33,7 @@ class UIRenderer {
     }
 
     // ... (renderExpiringSoon unchanged) ...
-    renderExpiringSoon(activeItems, ignoredItems, fullyUsedItems, days, mainOpen, isIgnoredOpen, isFullyUsedOpen) {
+    renderExpiringSoon(activeItems, ignoredItems, fullyUsedItems, pendingMinSpends, days, mainOpen, isIgnoredOpen, isFullyUsedOpen, isMinSpendOpen) {
         const activeList = document.getElementById('expiring-active-list');
         const subsections = document.getElementById('expiring-subsections');
 
@@ -62,6 +62,24 @@ class UIRenderer {
             return li;
         };
 
+        const createMinSpendItem = (item) => {
+            const li = document.createElement('li');
+            li.className = 'expiring-item min-spend-item';
+            const progressPercent = ((item.minSpend.currentAmount / item.minSpend.targetAmount) * 100).toFixed(0);
+            li.innerHTML = `
+                <span class="expiring-item-amount" style="color:var(--warning)">
+                    $${item.remainingAmount.toFixed(2)}
+                </span>
+                <div class="expiring-item-details">
+                    <div class="expiring-item-benefit">📋 ${item.minSpend.description}</div>
+                    <div class="expiring-item-card">${item.cardName}</div>
+                    <div class="expiring-item-progress">${progressPercent}% complete ($${item.minSpend.currentAmount.toFixed(2)} / $${item.minSpend.targetAmount.toFixed(2)})</div>
+                </div>
+                <span class="expiring-item-date">Due: ${item.deadline.toLocaleDateString()}</span>
+            `;
+            return li;
+        };
+
         if (activeItems.length === 0) {
             const li = document.createElement('li');
             li.className = 'expiring-item-empty';
@@ -69,6 +87,23 @@ class UIRenderer {
             activeList.appendChild(li);
         } else {
             activeItems.forEach(item => activeList.appendChild(createItem(item, false)));
+        }
+
+        // Pending minimum spends section
+        if (pendingMinSpends && pendingMinSpends.length > 0) {
+            const details = document.createElement('details');
+            details.className = 'expiring-subsection min-spend-section';
+            if (isMinSpendOpen) details.setAttribute('open', 'true');
+
+            const summary = document.createElement('summary');
+            summary.textContent = `📋 Pending Min Spends (${pendingMinSpends.length})`;
+            details.appendChild(summary);
+
+            const list = document.createElement('ul');
+            list.className = 'expiring-list';
+            pendingMinSpends.forEach(item => list.appendChild(createMinSpendItem(item)));
+            details.appendChild(list);
+            subsections.appendChild(details);
         }
 
         if (ignoredItems.length > 0) {
@@ -199,12 +234,505 @@ class UIRenderer {
         addBenefitContainer.appendChild(showBtn);
         addBenefitContainer.appendChild(form);
 
+        // Minimum Spends Section
+        const minSpendSection = this.createMinimumSpendsSection(card);
+
         cardBody.appendChild(benefitList);
         cardBody.appendChild(addBenefitContainer);
+        cardBody.appendChild(minSpendSection);
         cardDiv.appendChild(cardHeader);
         cardDiv.appendChild(cardBody);
 
         return cardDiv;
+    }
+
+    /**
+     * Creates the minimum spends section for a card.
+     * @param {Card} card - The card
+     * @returns {HTMLElement}
+     */
+    createMinimumSpendsSection(card) {
+        const section = document.createElement('div');
+        section.className = 'min-spend-section-container';
+        
+        const minimumSpends = card.minimumSpends || [];
+        
+        // Header
+        const header = document.createElement('div');
+        header.className = 'min-spend-header';
+        header.innerHTML = `<h4 style="margin: 0; font-size: 0.95rem;">📋 Minimum Spend Requirements (${minimumSpends.length})</h4>`;
+        section.appendChild(header);
+
+        // List of minimum spends
+        if (minimumSpends.length > 0) {
+            const list = document.createElement('ul');
+            list.className = 'min-spend-list';
+            minimumSpends.forEach(minSpend => {
+                list.appendChild(this.createMinimumSpendElement(minSpend, card));
+            });
+            section.appendChild(list);
+        }
+
+        // Add Minimum Spend Form
+        const addContainer = document.createElement('div');
+        addContainer.className = 'add-min-spend-container';
+        const showBtn = document.createElement('button');
+        showBtn.className = 'secondary-btn show-add-min-spend-btn';
+        showBtn.textContent = 'Add Minimum Spend';
+
+        const form = this.createAddMinimumSpendForm(card.id);
+        form.style.display = 'none';
+
+        showBtn.onclick = () => {
+            showBtn.style.display = 'none';
+            form.style.display = 'flex';
+        };
+
+        addContainer.appendChild(showBtn);
+        addContainer.appendChild(form);
+        section.appendChild(addContainer);
+
+        return section;
+    }
+
+    /**
+     * Creates a minimum spend element.
+     * @param {MinimumSpend} minSpend - The minimum spend
+     * @param {Card} card - The parent card
+     * @returns {HTMLElement}
+     */
+    createMinimumSpendElement(minSpend, card) {
+        const li = document.createElement('li');
+        li.className = 'min-spend-item';
+        li.dataset.minSpendId = minSpend.id;
+
+        const isMet = minSpend.isMet;
+        const isIgnored = minSpend.isIgnoredActive ? minSpend.isIgnoredActive(this.app.today) : this.app.isMinimumSpendIgnored(minSpend);
+        const progressPercent = minSpend.getProgressPercent ? minSpend.getProgressPercent() : 
+            ((minSpend.currentAmount / minSpend.targetAmount) * 100);
+        const remainingAmount = minSpend.getRemainingAmount ? minSpend.getRemainingAmount() :
+            Math.max(minSpend.targetAmount - minSpend.currentAmount, 0);
+
+        if (isMet) li.classList.add('min-spend-met');
+        if (isIgnored) li.classList.add('min-spend-ignored');
+
+        // Details section
+        const detailsDiv = document.createElement('div');
+        detailsDiv.className = 'details';
+        detailsDiv.style.cursor = 'pointer';
+
+        // Title row
+        let titleHtml = `<span class="description">${minSpend.description}</span>`;
+        if (isMet) {
+            titleHtml += `<span class="min-spend-badge min-spend-met-badge">✅ Met</span>`;
+        }
+        if (isIgnored) {
+            titleHtml += `<span class="min-spend-badge min-spend-ignored-badge">🚫 Ignored</span>`;
+        }
+
+        // Get linked benefits
+        const linkedBenefits = card.getBenefitsRequiringMinimumSpend 
+            ? card.getBenefitsRequiringMinimumSpend(minSpend.id)
+            : card.benefits.filter(b => b.requiredMinimumSpendId === minSpend.id);
+        
+        if (linkedBenefits.length > 0) {
+            titleHtml += `<span class="min-spend-badge min-spend-linked-badge">🔗 ${linkedBenefits.length} benefit(s)</span>`;
+        }
+
+        const titleRow = document.createElement('div');
+        titleRow.style.display = 'flex';
+        titleRow.style.alignItems = 'center';
+        titleRow.style.gap = '8px';
+        titleRow.innerHTML = titleHtml;
+        detailsDiv.appendChild(titleRow);
+
+        // Status
+        const statusSpan = document.createElement('span');
+        statusSpan.className = 'status';
+        if (isMet) {
+            statusSpan.style.color = 'var(--success)';
+            statusSpan.textContent = `Completed! $${minSpend.targetAmount.toFixed(2)} spent`;
+        } else {
+            statusSpan.style.color = 'var(--warning)';
+            statusSpan.textContent = `$${remainingAmount.toFixed(2)} to go`;
+        }
+        detailsDiv.appendChild(statusSpan);
+
+        detailsDiv.onclick = (e) => {
+            if (e.target.closest('.edit-form')) return;
+            if (e.target.closest('.smart-stepper-btn')) return;
+            if (e.target.tagName === 'INPUT') return;
+            li.classList.toggle('min-spend-collapsed');
+        };
+
+        // Meta
+        const metaDiv = document.createElement('div');
+        metaDiv.className = 'meta';
+        let metaText = `($${minSpend.currentAmount.toFixed(2)} / $${minSpend.targetAmount.toFixed(2)}) - ${minSpend.frequency}`;
+        if (minSpend.frequency !== 'one-time') metaText += ` | ${minSpend.resetType}`;
+        metaDiv.textContent = metaText;
+
+        // Progress bar
+        const progressContainer = document.createElement('div');
+        progressContainer.className = 'progress-bar';
+        const barColor = isMet ? 'var(--success)' : 'var(--warning)';
+        progressContainer.innerHTML = `<div class="progress-bar-inner" style="width: ${Math.min(progressPercent, 100)}%; background-color: ${barColor};"></div>`;
+
+        // Deadline
+        const deadlineDiv = document.createElement('div');
+        deadlineDiv.className = 'next-reset';
+        const deadline = minSpend.getDeadline ? minSpend.getDeadline(this.app.today) : 
+            (minSpend.deadline ? new Date(minSpend.deadline) : null);
+        if (deadline) {
+            deadlineDiv.textContent = isMet 
+                ? `Met on: ${minSpend.metDate ? new Date(minSpend.metDate).toLocaleDateString() : 'N/A'}`
+                : `Deadline: ${deadline.toLocaleDateString()}`;
+        } else {
+            deadlineDiv.textContent = minSpend.frequency === 'one-time' ? 'No deadline set' : `${minSpend.frequency} requirement`;
+        }
+
+        // Controls
+        const controlsDiv = document.createElement('div');
+        controlsDiv.className = 'benefit-controls';
+
+        if (!isMet) {
+            // Spend progress controls
+            const updateLabel = document.createElement('label');
+            updateLabel.textContent = 'Current spend: $';
+
+            const inputWrapper = document.createElement('div');
+            inputWrapper.className = 'smart-input-wrapper';
+            const decBtn = document.createElement('button');
+            decBtn.className = 'smart-stepper-btn';
+            decBtn.textContent = '−';
+            decBtn.tabIndex = -1;
+            const updateInput = document.createElement('input');
+            updateInput.type = 'number';
+            updateInput.value = minSpend.currentAmount.toFixed(2);
+            updateInput.min = "0";
+            updateInput.step = "0.01";
+            const incBtn = document.createElement('button');
+            incBtn.className = 'smart-stepper-btn';
+            incBtn.textContent = '+';
+            incBtn.tabIndex = -1;
+
+            const getSmartStep = () => {
+                if (minSpend.targetAmount >= 1000) return 50;
+                if (minSpend.targetAmount >= 200) return 10;
+                if (minSpend.targetAmount >= 10) return 1;
+                return 0.01;
+            };
+
+            const handleSmartIncrement = (direction) => {
+                const step = getSmartStep();
+                let current = parseFloat(updateInput.value) || 0;
+                let nextVal;
+                if (direction === 'up') {
+                    nextVal = (Math.floor(current / step) + 1) * step;
+                } else {
+                    if (current % step === 0) nextVal = current - step;
+                    else nextVal = Math.ceil(current / step) * step - step;
+                }
+                if (nextVal < 0) nextVal = 0;
+                nextVal = parseFloat(nextVal.toFixed(2));
+                updateInput.value = nextVal.toFixed(2);
+                this.app.handleUpdateMinimumSpendProgress(minSpend.id, nextVal);
+            };
+
+            decBtn.onclick = (e) => {
+                e.stopPropagation();
+                handleSmartIncrement('down');
+            };
+            incBtn.onclick = (e) => {
+                e.stopPropagation();
+                handleSmartIncrement('up');
+            };
+            updateInput.onfocus = (e) => e.target.select();
+            updateInput.onblur = (e) => {
+                if (e.target.value === '') e.target.value = minSpend.currentAmount.toFixed(2);
+            };
+            updateInput.onchange = (e) => {
+                this.app.handleUpdateMinimumSpendProgress(minSpend.id, parseFloat(e.target.value));
+            };
+
+            inputWrapper.appendChild(decBtn);
+            inputWrapper.appendChild(updateInput);
+            inputWrapper.appendChild(incBtn);
+
+            controlsDiv.appendChild(updateLabel);
+            controlsDiv.appendChild(inputWrapper);
+        }
+
+        const rightControls = document.createElement('div');
+        rightControls.className = 'controls-right';
+        const editBtn = document.createElement('button');
+        editBtn.className = 'secondary-btn';
+        editBtn.textContent = 'Edit';
+        editBtn.onclick = () => this.renderMinimumSpendEdit(minSpend, card);
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'danger-btn';
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.onclick = () => this.app.handleDeleteMinimumSpend(minSpend.id);
+
+        rightControls.appendChild(editBtn);
+        rightControls.appendChild(deleteBtn);
+        controlsDiv.appendChild(rightControls);
+
+        li.appendChild(detailsDiv);
+        li.appendChild(metaDiv);
+        li.appendChild(progressContainer);
+        li.appendChild(deadlineDiv);
+        li.appendChild(controlsDiv);
+
+        return li;
+    }
+
+    /**
+     * Creates the add minimum spend form.
+     * @param {string} cardId - The card ID
+     * @returns {HTMLFormElement}
+     */
+    createAddMinimumSpendForm(cardId) {
+        const form = document.createElement('form');
+        form.className = 'benefit-form';
+        const uId = Math.random().toString(36).substr(2, 9);
+
+        form.innerHTML = `
+            <h3 style="margin: 0; font-size: 1.1rem;">Add Minimum Spend Requirement</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Description</label>
+                    <input type="text" name="description" placeholder="E.g., $3,000 in first 3 months" required>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Target Amount</label>
+                    <input type="number" name="targetAmount" placeholder="3000.00" min="0.01" step="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label>Frequency</label>
+                    <select name="frequency" id="ms-freq-${uId}" required>
+                        <option value="" disabled selected>Select...</option>
+                        <option value="one-time">One-Time</option>
+                        <option value="yearly">Yearly</option>
+                        <option value="quarterly">Quarterly</option>
+                        <option value="monthly">Monthly</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group" id="ms-reset-group-${uId}" style="display: none;">
+                    <label>Reset Type</label>
+                    <select name="resetType" id="ms-reset-${uId}">
+                        <option value="calendar">Calendar</option>
+                        <option value="anniversary">Anniversary-Dated</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row" id="ms-deadline-row-${uId}" style="display:none; border-top:1px dashed #ccc; padding-top:10px;">
+                <div class="form-group">
+                    <label>Deadline</label>
+                    <input type="date" name="deadline" id="ms-deadline-${uId}">
+                    <small style="color: #666;">When must this minimum spend be met?</small>
+                </div>
+            </div>
+            <!-- Ignore Inputs -->
+            <div class="form-row" id="ms-ignore-row-${uId}" style="display:none; border-top:1px dashed #ccc; padding-top:10px;">
+                <div class="form-group" style="flex-direction:row; align-items:center; gap:10px; flex:0;">
+                    <input type="checkbox" name="ignored" id="ms-ig-check-${uId}" style="width:auto;">
+                    <label for="ms-ig-check-${uId}" style="margin:0; white-space:nowrap;">Ignore?</label>
+                </div>
+                <div class="form-group" id="ms-ig-date-group-${uId}" style="display:none;">
+                    <label style="margin-bottom:2px;">Until Date</label>
+                    <input type="date" name="ignoredEndDate">
+                </div>
+            </div>
+            <button type="submit">Add Minimum Spend</button>
+        `;
+
+        const freqSelect = form.querySelector(`#ms-freq-${uId}`);
+        const resetGroup = form.querySelector(`#ms-reset-group-${uId}`);
+        const resetSelect = form.querySelector(`#ms-reset-${uId}`);
+        const deadlineRow = form.querySelector(`#ms-deadline-row-${uId}`);
+        const ignoreRow = form.querySelector(`#ms-ignore-row-${uId}`);
+        const igCheck = form.querySelector(`#ms-ig-check-${uId}`);
+        const igDateGroup = form.querySelector(`#ms-ig-date-group-${uId}`);
+
+        freqSelect.onchange = (e) => {
+            const isOneTime = e.target.value === 'one-time';
+            if (isOneTime) {
+                resetGroup.style.display = 'none';
+                resetSelect.required = false;
+                deadlineRow.style.display = 'flex';
+                ignoreRow.style.display = 'none';
+            } else {
+                resetGroup.style.display = 'block';
+                resetSelect.required = true;
+                deadlineRow.style.display = 'none';
+                ignoreRow.style.display = 'flex';
+            }
+        };
+
+        igCheck.onchange = (e) => {
+            igDateGroup.style.display = e.target.checked ? 'flex' : 'none';
+            igDateGroup.querySelector('input').required = e.target.checked;
+        };
+
+        form.onsubmit = (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const frequency = formData.get('frequency');
+            
+            const minSpendData = {
+                description: formData.get('description'),
+                targetAmount: parseFloat(formData.get('targetAmount')),
+                frequency: frequency,
+                resetType: frequency === 'one-time' ? null : formData.get('resetType'),
+                deadline: frequency === 'one-time' ? (formData.get('deadline') || null) : null,
+                ignored: formData.get('ignored') === 'on',
+                ignoredEndDate: formData.get('ignoredEndDate') || null
+            };
+            this.app.handleAddMinimumSpend(cardId, minSpendData);
+            e.target.reset();
+            resetGroup.style.display = 'none';
+            deadlineRow.style.display = 'none';
+            ignoreRow.style.display = 'none';
+            igDateGroup.style.display = 'none';
+            form.style.display = 'none';
+            form.previousElementSibling.style.display = 'block';
+        };
+
+        return form;
+    }
+
+    /**
+     * Renders the edit form for a minimum spend.
+     * @param {MinimumSpend} minSpend - The minimum spend
+     * @param {Card} card - The parent card
+     */
+    renderMinimumSpendEdit(minSpend, card) {
+        const minSpendEl = document.querySelector(`.min-spend-item[data-min-spend-id="${minSpend.id}"]`);
+        if (!minSpendEl) return;
+
+        const form = document.createElement('div');
+        form.className = 'edit-form';
+        form.style.marginBottom = '0';
+        const uId = Math.random().toString(36).substr(2, 9);
+
+        const isOneTime = minSpend.frequency === 'one-time';
+        const isRecurring = !isOneTime;
+        const hasIgnored = minSpend.ignored === true;
+
+        form.innerHTML = `
+            <h3 style="margin: 0; font-size: 1.1rem;">Editing: ${minSpend.description}</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Description</label>
+                    <input type="text" id="ms-desc-${uId}" value="${minSpend.description}" required>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Target Amount</label>
+                    <input type="number" id="ms-amt-${uId}" value="${minSpend.targetAmount.toFixed(2)}" min="0.01" step="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label>Frequency</label>
+                    <select id="ms-freq-${uId}" required>
+                        <option value="one-time" ${minSpend.frequency === 'one-time' ? 'selected' : ''}>One-Time</option>
+                        <option value="yearly" ${minSpend.frequency === 'yearly' ? 'selected' : ''}>Yearly</option>
+                        <option value="quarterly" ${minSpend.frequency === 'quarterly' ? 'selected' : ''}>Quarterly</option>
+                        <option value="monthly" ${minSpend.frequency === 'monthly' ? 'selected' : ''}>Monthly</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group" id="ms-reset-group-${uId}" style="display: ${isRecurring ? 'block' : 'none'};">
+                    <label>Reset Type</label>
+                    <select id="ms-reset-${uId}" ${isRecurring ? 'required' : ''}>
+                        <option value="calendar" ${minSpend.resetType === 'calendar' ? 'selected' : ''}>Calendar</option>
+                        <option value="anniversary" ${minSpend.resetType === 'anniversary' ? 'selected' : ''}>Anniversary-Dated</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row" id="ms-deadline-row-${uId}" style="display:${isOneTime ? 'flex' : 'none'}; border-top:1px dashed #ccc; padding-top:10px;">
+                <div class="form-group">
+                    <label>Deadline</label>
+                    <input type="date" id="ms-deadline-${uId}" value="${minSpend.deadline || ''}">
+                </div>
+            </div>
+            <div class="form-row" id="ms-ignore-row-${uId}" style="display:${isRecurring ? 'flex' : 'none'}; border-top:1px dashed #ccc; padding-top:10px;">
+                <div class="form-group" style="flex-direction:row; align-items:center; gap:10px; flex:0;">
+                    <input type="checkbox" id="ms-ig-check-${uId}" style="width:auto;" ${hasIgnored ? 'checked' : ''}>
+                    <label for="ms-ig-check-${uId}" style="margin:0;">Ignore?</label>
+                </div>
+                <div class="form-group" id="ms-ig-date-group-${uId}" style="display:${hasIgnored ? 'flex' : 'none'};">
+                    <label style="margin-bottom:2px;">Until Date</label>
+                    <input type="date" id="ms-ig-date-${uId}" value="${minSpend.ignoredEndDate || ''}" ${hasIgnored ? 'required' : ''}>
+                </div>
+            </div>
+            <div class="form-row" style="justify-content: flex-end;">
+                <button class="secondary-btn" id="ms-cancel-${uId}">Cancel</button>
+                <button id="ms-save-${uId}">Save Changes</button>
+            </div>
+        `;
+
+        minSpendEl.innerHTML = '';
+        minSpendEl.appendChild(form);
+
+        const freqSelect = document.getElementById(`ms-freq-${uId}`);
+        const resetGroup = document.getElementById(`ms-reset-group-${uId}`);
+        const resetSelect = document.getElementById(`ms-reset-${uId}`);
+        const deadlineRow = document.getElementById(`ms-deadline-row-${uId}`);
+        const deadlineInput = document.getElementById(`ms-deadline-${uId}`);
+        const ignoreRow = document.getElementById(`ms-ignore-row-${uId}`);
+        const igCheck = document.getElementById(`ms-ig-check-${uId}`);
+        const igDateGroup = document.getElementById(`ms-ig-date-group-${uId}`);
+        const igDateInput = document.getElementById(`ms-ig-date-${uId}`);
+
+        freqSelect.onchange = (e) => {
+            const isOneTimeSelected = e.target.value === 'one-time';
+            if (isOneTimeSelected) {
+                resetGroup.style.display = 'none';
+                resetSelect.required = false;
+                deadlineRow.style.display = 'flex';
+                ignoreRow.style.display = 'none';
+            } else {
+                resetGroup.style.display = 'block';
+                resetSelect.required = true;
+                deadlineRow.style.display = 'none';
+                ignoreRow.style.display = 'flex';
+            }
+        };
+
+        igCheck.onchange = (e) => {
+            igDateGroup.style.display = e.target.checked ? 'flex' : 'none';
+            igDateInput.required = e.target.checked;
+        };
+
+        document.getElementById(`ms-save-${uId}`).onclick = () => {
+            const frequency = freqSelect.value;
+            const isOneTimeSelected = frequency === 'one-time';
+            
+            const newData = {
+                description: document.getElementById(`ms-desc-${uId}`).value.trim(),
+                targetAmount: parseFloat(document.getElementById(`ms-amt-${uId}`).value),
+                frequency: frequency,
+                resetType: isOneTimeSelected ? null : resetSelect.value,
+                deadline: isOneTimeSelected ? (deadlineInput.value || null) : null,
+                ignored: igCheck.checked,
+                ignoredEndDate: igCheck.checked ? igDateInput.value : null
+            };
+            
+            if (newData.description && newData.targetAmount) {
+                this.app.handleUpdateMinimumSpend(minSpend.id, newData);
+            }
+        };
+
+        document.getElementById(`ms-cancel-${uId}`).onclick = () => {
+            this.app.render();
+        };
     }
 
     createBenefitElement(benefit, card, isCollapsed) {
@@ -216,6 +744,10 @@ class UIRenderer {
         const isIgnored = this.app.isIgnoredActive(benefit);
         // Check carryover using helper
         const isCarryover = this._isCarryoverBenefit(benefit);
+        
+        // Check if benefit is locked by minimum spend
+        const isLockedByMinSpend = this.app.isBenefitLockedByMinimumSpend(benefit);
+        const lockedByMinSpend = isLockedByMinSpend ? this.app.getLockedByMinimumSpend(benefit) : null;
         
         // For carryover benefits, get active instances
         const activeInstances = isCarryover ? this.app.getActiveCarryoverInstances(benefit) : [];
@@ -241,6 +773,7 @@ class UIRenderer {
 
         if (isCollapsed) li.classList.add('benefit-used');
         if (isIgnored) li.classList.add('benefit-ignored');
+        if (isLockedByMinSpend) li.classList.add('benefit-locked');
 
         // Details
         const detailsDiv = document.createElement('div');
@@ -254,6 +787,9 @@ class UIRenderer {
         dragHandle.innerHTML = '⋮⋮';
 
         let titleHtml = `<span class="description">${benefit.description}</span>`;
+        if (isLockedByMinSpend) {
+            titleHtml += `<span class="locked-badge">🔒 Locked</span>`;
+        }
         if (isAutoClaimed) titleHtml += `<span class="auto-claim-badge">🔄 Auto-Claim</span>`;
         if (isIgnored) titleHtml += `<span class="ignored-badge">🚫 Ignored</span>`;
         if (isCarryover) {
@@ -282,17 +818,28 @@ class UIRenderer {
         const statusSpan = document.createElement('span');
         statusSpan.className = 'status';
         
-        if (isCarryover) {
+        if (isLockedByMinSpend) {
+            // Show locked status
+            statusSpan.style.color = 'var(--secondary-color)';
+            const minSpendProgress = lockedByMinSpend.currentAmount || 0;
+            const minSpendTarget = lockedByMinSpend.targetAmount || 0;
+            statusSpan.textContent = `🔒 Requires: ${lockedByMinSpend.description} ($${minSpendProgress.toFixed(2)} / $${minSpendTarget.toFixed(2)})`;
+        } else if (isCarryover) {
             if (hasEarnedInstances) {
                 // Show total remaining across all instances
                 statusSpan.style.color = isUsed ? 'var(--success)' : 'var(--danger)';
                 statusSpan.textContent = `$${remaining.toFixed(2)} remaining`;
             } else if (canEarnThisYear) {
-                // Show earn progress status
-                statusSpan.style.color = 'var(--warning)';
-                const earnProgress = benefit.earnProgress || 0;
-                const earnThreshold = benefit.earnThreshold || 0;
-                statusSpan.textContent = `$${earnProgress.toFixed(2)} / $${earnThreshold.toFixed(2)} to earn`;
+                // Carryover can earn - check for linked minimum spend
+                if (benefit.requiredMinimumSpendId) {
+                    // Has a linked minimum spend - show that the benefit will be earned when met
+                    statusSpan.style.color = 'var(--warning)';
+                    statusSpan.textContent = 'Pending minimum spend...';
+                } else {
+                    // No linked minimum spend - can't earn
+                    statusSpan.style.color = 'var(--secondary-color)';
+                    statusSpan.textContent = 'Link to minimum spend to earn';
+                }
             } else {
                 statusSpan.style.color = 'var(--secondary-color)';
                 statusSpan.textContent = 'No active credits';
@@ -316,13 +863,19 @@ class UIRenderer {
         const metaDiv = document.createElement('div');
         metaDiv.className = 'meta';
         let metaText;
-        if (isCarryover) {
+        if (isLockedByMinSpend) {
+            metaText = `Unlocked when minimum spend is met: ${lockedByMinSpend.description}`;
+        } else if (isCarryover) {
             if (hasEarnedInstances) {
                 const totalUsed = activeInstances.reduce((sum, inst) => sum + (inst.usedAmount || 0), 0);
                 const totalCredit = activeInstances.length * benefit.totalAmount;
                 metaText = `($${totalUsed.toFixed(2)} / $${totalCredit.toFixed(2)}) - ${activeInstances.length} carryover credit(s)`;
             } else if (canEarnThisYear) {
-                metaText = `Earn $${benefit.earnThreshold.toFixed(2)} spend to unlock $${benefit.totalAmount.toFixed(2)} credit`;
+                if (benefit.requiredMinimumSpendId) {
+                    metaText = `Carryover benefit - pending minimum spend requirement`;
+                } else {
+                    metaText = `Carryover benefit - link to minimum spend to earn $${benefit.totalAmount.toFixed(2)} credit`;
+                }
             } else {
                 metaText = `Carryover benefit - no active credits`;
             }
@@ -335,12 +888,23 @@ class UIRenderer {
         // Progress bar - show earn progress for earning carryover, usage progress otherwise
         const progressContainer = document.createElement('div');
         progressContainer.className = 'progress-bar';
-        if (isCarryover && canEarnThisYear && !hasEarnedInstances) {
-            // Earn progress bar (only show when earning and no earned instances)
-            const earnProgress = benefit.earnProgress || 0;
-            const earnThreshold = benefit.earnThreshold || 1;
-            const earnPercent = Math.min((earnProgress / earnThreshold) * 100, 100);
-            progressContainer.innerHTML = `<div class="progress-bar-inner" style="width: ${earnPercent}%; background-color: var(--warning);"></div>`;
+        if (isLockedByMinSpend) {
+            // Show minimum spend progress
+            const minSpendProgress = lockedByMinSpend.currentAmount || 0;
+            const minSpendTarget = lockedByMinSpend.targetAmount || 1;
+            const minSpendPercent = Math.min((minSpendProgress / minSpendTarget) * 100, 100);
+            progressContainer.innerHTML = `<div class="progress-bar-inner" style="width: ${minSpendPercent}%; background-color: var(--secondary-color);"></div>`;
+        } else if (isCarryover && canEarnThisYear && !hasEarnedInstances && benefit.requiredMinimumSpendId) {
+            // Show linked minimum spend progress for carryover benefits
+            const linkedMinSpend = this.app.findMinimumSpend(benefit.requiredMinimumSpendId);
+            if (linkedMinSpend) {
+                const minSpendProgress = linkedMinSpend.currentAmount || 0;
+                const minSpendTarget = linkedMinSpend.targetAmount || 1;
+                const minSpendPercent = Math.min((minSpendProgress / minSpendTarget) * 100, 100);
+                progressContainer.innerHTML = `<div class="progress-bar-inner" style="width: ${minSpendPercent}%; background-color: var(--warning);"></div>`;
+            } else {
+                progressContainer.innerHTML = `<div class="progress-bar-inner" style="width: 0%;"></div>`;
+            }
         } else {
             // Normal usage progress bar
             progressContainer.innerHTML = `<div class="progress-bar-inner" style="width: ${progressPercent}%; background-color: ${isUsed ? 'var(--success)' : 'var(--primary-color)'};"></div>`;
@@ -391,75 +955,8 @@ class UIRenderer {
         const controlsDiv = document.createElement('div');
         controlsDiv.className = 'benefit-controls';
         
-        // For carryover benefits, show earn progress and/or instance usage controls
+        // For carryover benefits, show instance usage controls (earn progress is now managed via MinimumSpend)
         if (isCarryover) {
-            // Show earn progress controls if can still earn this year
-            if (canEarnThisYear) {
-                const earnLabel = document.createElement('label');
-                earnLabel.textContent = 'Spend progress: $';
-
-                const earnInputWrapper = document.createElement('div');
-                earnInputWrapper.className = 'smart-input-wrapper';
-                const earnDecBtn = document.createElement('button');
-                earnDecBtn.className = 'smart-stepper-btn';
-                earnDecBtn.textContent = '−';
-                earnDecBtn.tabIndex = -1;
-                const earnInput = document.createElement('input');
-                earnInput.type = 'number';
-                earnInput.value = (benefit.earnProgress || 0).toFixed(2);
-                earnInput.min = "0";
-                earnInput.step = "0.01";
-                const earnIncBtn = document.createElement('button');
-                earnIncBtn.className = 'smart-stepper-btn';
-                earnIncBtn.textContent = '+';
-                earnIncBtn.tabIndex = -1;
-
-                const getEarnSmartStep = () => {
-                    if (benefit.earnThreshold >= 1000) return 50;
-                    if (benefit.earnThreshold >= 200) return 10;
-                    if (benefit.earnThreshold >= 10) return 1;
-                    return 0.01;
-                };
-                const handleEarnSmartIncrement = (direction) => {
-                    const step = getEarnSmartStep();
-                    let current = parseFloat(earnInput.value) || 0;
-                    let nextVal;
-                    if (direction === 'up') {
-                        nextVal = (Math.floor(current / step) + 1) * step;
-                    } else {
-                        if (current % step === 0) nextVal = current - step;
-                        else nextVal = Math.ceil(current / step) * step - step;
-                    }
-                    if (nextVal < 0) nextVal = 0;
-                    nextVal = parseFloat(nextVal.toFixed(2));
-                    earnInput.value = nextVal.toFixed(2);
-                    this.app.handleUpdateEarnProgress(benefit.id, nextVal);
-                };
-
-                earnDecBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    handleEarnSmartIncrement('down');
-                };
-                earnIncBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    handleEarnSmartIncrement('up');
-                };
-                earnInput.onfocus = (e) => e.target.select();
-                earnInput.onblur = (e) => {
-                    if (e.target.value === '') e.target.value = (benefit.earnProgress || 0).toFixed(2);
-                };
-                earnInput.onchange = (e) => {
-                    this.app.handleUpdateEarnProgress(benefit.id, parseFloat(e.target.value));
-                };
-
-                earnInputWrapper.appendChild(earnDecBtn);
-                earnInputWrapper.appendChild(earnInput);
-                earnInputWrapper.appendChild(earnIncBtn);
-
-                controlsDiv.appendChild(earnLabel);
-                controlsDiv.appendChild(earnInputWrapper);
-            }
-
             // Show usage controls for each earned instance
             if (hasEarnedInstances) {
                 activeInstances.forEach((instance, index) => {
@@ -632,7 +1129,14 @@ class UIRenderer {
     createAddBenefitForm(cardId) {
         const form = document.createElement('form');
         form.className = 'benefit-form';
-        const uId = Math.random().toString(36).substr(2, 9);
+        const uId = Math.random().toString(36).substring(2, 11);
+
+        // Get minimum spends for dropdown
+        const card = this.app.cards.find(c => c.id === cardId);
+        const minSpends = card && card.minimumSpends ? card.minimumSpends : [];
+        const minSpendOptions = minSpends.map(ms => 
+            `<option value="${ms.id}">${ms.description} ($${ms.targetAmount.toFixed(2)})</option>`
+        ).join('');
 
         form.innerHTML = `
             <h3 style="margin: 0; font-size: 1.1rem;">Add New Benefit</h3>
@@ -671,12 +1175,15 @@ class UIRenderer {
                 </div>
             </div>
             
-            <!-- Carryover Earn Threshold -->
-            <div class="form-row" id="carryover-row-${uId}" style="display:none; border-top:1px dashed #ccc; padding-top:10px;">
+            <!-- Minimum Spend Requirement (for one-time and carryover benefits) -->
+            <div class="form-row" id="min-spend-row-${uId}" style="display:none; border-top:1px dashed #ccc; padding-top:10px;">
                 <div class="form-group">
-                    <label>Earn Threshold (minimum spend to earn)</label>
-                    <input type="number" name="earnThreshold" id="earn-threshold-${uId}" placeholder="3000.00" min="0.01" step="0.01">
-                    <small style="color: #666;">Spend this amount to unlock the credit. Credit is valid until end of next year.</small>
+                    <label>🔗 Required Minimum Spend</label>
+                    <select name="requiredMinimumSpendId" id="min-spend-${uId}">
+                        <option value="">None (no requirement)</option>
+                        ${minSpendOptions}
+                    </select>
+                    <small style="color: #666;">Link this benefit to a minimum spend requirement to unlock it.</small>
                 </div>
             </div>
             
@@ -719,8 +1226,7 @@ class UIRenderer {
         const resetGroup = form.querySelector(`#reset-group-${uId}`);
         const resetSelect = form.querySelector(`#reset-${uId}`);
 
-        const carryoverRow = form.querySelector(`#carryover-row-${uId}`);
-        const earnThresholdInput = form.querySelector(`#earn-threshold-${uId}`);
+        const minSpendRow = form.querySelector(`#min-spend-row-${uId}`);
 
         const acRow = form.querySelector(`#auto-claim-row-${uId}`);
         const acCheck = form.querySelector(`#ac-check-${uId}`);
@@ -737,27 +1243,24 @@ class UIRenderer {
             const isCarryover = e.target.value === 'carryover';
             
             if (isCarryover) {
-                // Show carryover-specific fields only
+                // Show carryover-specific fields - use minimum spend for earning
                 resetGroup.style.display = 'none';
                 resetSelect.required = false;
-                carryoverRow.style.display = 'flex';
-                earnThresholdInput.required = true;
+                minSpendRow.style.display = 'flex'; // Show minimum spend dropdown
                 acRow.style.display = 'none';
                 igRow.style.display = 'none';
                 expiryRow.style.display = 'none';
             } else if (isOneTime) {
                 resetGroup.style.display = 'none';
                 resetSelect.required = false;
-                carryoverRow.style.display = 'none';
-                earnThresholdInput.required = false;
+                minSpendRow.style.display = 'flex'; // Show minimum spend dropdown
                 acRow.style.display = 'none';
                 igRow.style.display = 'none';
                 expiryRow.style.display = 'flex';
             } else {
                 resetGroup.style.display = 'block';
                 resetSelect.required = true;
-                carryoverRow.style.display = 'none';
-                earnThresholdInput.required = false;
+                minSpendRow.style.display = 'none';
                 acRow.style.display = 'flex';
                 igRow.style.display = 'flex';
                 expiryRow.style.display = 'none';
@@ -789,6 +1292,7 @@ class UIRenderer {
             const formData = new FormData(e.target);
             const frequency = formData.get('frequency');
             const isCarryover = frequency === 'carryover';
+            const isOneTime = frequency === 'one-time';
             
             const benefitData = {
                 description: formData.get('description'),
@@ -802,15 +1306,15 @@ class UIRenderer {
                 expiryDate: frequency === 'one-time' ? (formData.get('expiryDate') || null) : null,
                 // Carryover-specific fields
                 isCarryover: isCarryover,
-                earnThreshold: isCarryover ? parseFloat(formData.get('earnThreshold')) : null,
-                earnProgress: isCarryover ? 0 : null,
-                earnedDate: null
+                earnedDate: null,
+                // Link to minimum spend for earning (for both carryover and one-time)
+                requiredMinimumSpendId: (isCarryover || isOneTime) ? (formData.get('requiredMinimumSpendId') || null) : null
             };
             this.app.handleAddBenefit(cardId, benefitData);
             e.target.reset();
             resetGroup.style.display = 'none';
             acRow.style.display = 'none';
-            carryoverRow.style.display = 'none';
+            minSpendRow.style.display = 'none';
             acDateGroup.style.display = 'none';
             igRow.style.display = 'none';
             igDateGroup.style.display = 'none';
@@ -827,7 +1331,7 @@ class UIRenderer {
 
         const form = document.createElement('div');
         form.className = 'edit-form';
-        const uId = Math.random().toString(36).substr(2, 9);
+        const uId = Math.random().toString(36).substring(2, 11);
 
         form.innerHTML = `
             <h3 style="margin: 0;">Editing: ${card.name}</h3>
@@ -878,6 +1382,14 @@ class UIRenderer {
         const hasAutoClaim = benefit.autoClaim === true;
         const hasIgnored = benefit.ignored === true;
 
+        // Build minimum spend options
+        const minimumSpends = card.minimumSpends || [];
+        let minSpendOptions = '<option value="">None (no requirement)</option>';
+        minimumSpends.forEach(ms => {
+            const selected = benefit.requiredMinimumSpendId === ms.id ? 'selected' : '';
+            minSpendOptions += `<option value="${ms.id}" ${selected}>${ms.description} ($${ms.targetAmount.toFixed(2)})</option>`;
+        });
+
         form.innerHTML = `
             <h3 style="margin: 0; font-size: 1.1rem;">Editing: ${benefit.description}</h3>
             <div class="form-row">
@@ -914,12 +1426,14 @@ class UIRenderer {
                 </div>
             </div>
 
-            <!-- Carryover Earn Threshold -->
-            <div class="form-row" id="carryover-row-${uId}" style="display:${isCarryover ? 'flex' : 'none'}; border-top:1px dashed #ccc; padding-top:10px;">
+            <!-- Minimum Spend Requirement Link -->
+            <div class="form-row" id="min-spend-row-${uId}" style="border-top:1px dashed #ccc; padding-top:10px;">
                 <div class="form-group">
-                    <label>Earn Threshold (minimum spend to earn)</label>
-                    <input type="number" id="earn-threshold-${uId}" value="${(benefit.earnThreshold || 0).toFixed(2)}" min="0.01" step="0.01" ${isCarryover ? 'required' : ''}>
-                    <small style="color: #666;">Spend this amount to unlock the credit.</small>
+                    <label>🔗 Required Minimum Spend</label>
+                    <select id="min-spend-${uId}">
+                        ${minSpendOptions}
+                    </select>
+                    <small style="color: #666;">Link this benefit to a minimum spend requirement to unlock it.</small>
                 </div>
             </div>
 
@@ -968,8 +1482,8 @@ class UIRenderer {
         const resetGroup = document.getElementById(`reset-group-${uId}`);
         const resetSelect = document.getElementById(`reset-${uId}`);
         
-        const carryoverRow = document.getElementById(`carryover-row-${uId}`);
-        const earnThresholdInput = document.getElementById(`earn-threshold-${uId}`);
+        const minSpendRow = document.getElementById(`min-spend-row-${uId}`);
+        const minSpendSelect = document.getElementById(`min-spend-${uId}`);
         
         const acRow = document.getElementById(`auto-claim-row-${uId}`);
         const acCheck = document.getElementById(`ac-check-${uId}`);
@@ -991,24 +1505,21 @@ class UIRenderer {
             if (isCarryoverSelected) {
                 resetGroup.style.display = 'none';
                 resetSelect.required = false;
-                carryoverRow.style.display = 'flex';
-                earnThresholdInput.required = true;
+                minSpendRow.style.display = 'flex'; // Show min spend for carryover
                 acRow.style.display = 'none';
                 igRow.style.display = 'none';
                 expiryRow.style.display = 'none';
             } else if (isOneTimeSelected) {
                 resetGroup.style.display = 'none';
                 resetSelect.required = false;
-                carryoverRow.style.display = 'none';
-                earnThresholdInput.required = false;
+                minSpendRow.style.display = 'flex'; // Show min spend for one-time
                 acRow.style.display = 'none';
                 igRow.style.display = 'none';
                 expiryRow.style.display = 'flex';
             } else {
                 resetGroup.style.display = 'block';
                 resetSelect.required = true;
-                carryoverRow.style.display = 'none';
-                earnThresholdInput.required = false;
+                minSpendRow.style.display = 'none';
                 acRow.style.display = 'flex';
                 igRow.style.display = 'flex';
                 expiryRow.style.display = 'none';
@@ -1038,8 +1549,8 @@ class UIRenderer {
         document.getElementById(`save-${uId}`).onclick = () => {
             const frequency = freqSelect.value;
             const isCarryoverSelected = frequency === 'carryover';
+            const isOneTimeSelected = frequency === 'one-time';
             
-            const earnThresholdValue = parseFloat(earnThresholdInput.value);
             const newData = {
                 description: document.getElementById(`desc-${uId}`).value.trim(),
                 totalAmount: parseFloat(document.getElementById(`amt-${uId}`).value),
@@ -1052,18 +1563,17 @@ class UIRenderer {
                 expiryDate: frequency === 'one-time' ? (expiryDateInput.value || null) : null,
                 // Carryover-specific fields
                 isCarryover: isCarryoverSelected,
-                earnThreshold: isCarryoverSelected ? (isNaN(earnThresholdValue) ? 0 : earnThresholdValue) : null
+                // Minimum spend link (for both carryover and one-time benefits)
+                requiredMinimumSpendId: (isCarryoverSelected || isOneTimeSelected) ? (minSpendSelect.value || null) : null
             };
             
-            // Preserve existing carryover state if still a carryover benefit
+            // Preserve existing carryover earned instances if still a carryover benefit
             if (isCarryoverSelected && benefit.isCarryover) {
-                newData.earnProgress = benefit.earnProgress || 0;
-                newData.earnedDate = benefit.earnedDate || null;
+                newData.earnedInstances = benefit.earnedInstances || [];
                 newData.lastEarnReset = benefit.lastEarnReset || null;
             } else if (isCarryoverSelected) {
                 // Converting to carryover
-                newData.earnProgress = 0;
-                newData.earnedDate = null;
+                newData.earnedInstances = [];
             }
             
             if (frequency !== 'one-time' && !isCarryoverSelected) {
