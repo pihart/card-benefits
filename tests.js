@@ -9,7 +9,9 @@ const fs = require('fs');
 const path = require('path');
 
 // Load model classes (they define global classes)
-// Using vm.runInThisContext to execute in current global scope
+// The source files define classes in global scope for browser compatibility (no module.exports).
+// We use vm.runInThisContext to execute them in the current global context so classes become available.
+// This approach allows us to test browser-focused code in Node.js without modifying the source files.
 const vm = require('vm');
 
 function loadModule(filepath) {
