@@ -22,8 +22,10 @@ function loadModule(filepath) {
     
     // Check for directory traversal by ensuring resolved path is within project root
     const relativePath = path.relative(projectRoot, resolvedPath);
-    // If relative path starts with '..' or contains it, the file is outside project root
-    if (relativePath.startsWith('..') || relativePath.includes(path.sep + '..')) {
+    // Detect directory traversal: relative path starting with '..' means file is outside project
+    // Also check for path segments that are '..' which indicate upward traversal
+    const pathSegments = relativePath.split(path.sep);
+    if (relativePath.startsWith('..') || pathSegments.includes('..')) {
         throw new Error(`Security: Attempted to load file outside project directory: ${filepath}`);
     }
     
