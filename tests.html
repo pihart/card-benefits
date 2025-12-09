@@ -126,7 +126,8 @@
                             
                             const errorDiv = document.createElement('div');
                             errorDiv.className = 'test-error';
-                            errorDiv.textContent = `${error.message}\n${error.stack}`;
+                            // error.stack typically includes the message, so use it if available
+                            errorDiv.textContent = error.stack || error.message;
                             testDiv.appendChild(errorDiv);
                             
                             totalFail++;

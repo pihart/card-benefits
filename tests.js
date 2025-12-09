@@ -14,11 +14,13 @@ const vm = require('vm');
 
 function loadModule(filepath) {
     // Validate file path to ensure it's within the project directory
-    const resolvedPath = path.resolve(filepath);
-    // __dirname is the directory containing this test file, which is the project root
-    // Allow loading from project root and its subdirectories
+    // __dirname is the directory containing this test file (project root)
     const projectRoot = path.resolve(__dirname);
-    if (!resolvedPath.startsWith(projectRoot + path.sep) && resolvedPath !== projectRoot) {
+    const resolvedPath = path.resolve(filepath);
+    
+    // Check for directory traversal by ensuring resolved path is within project root
+    const relativePath = path.relative(projectRoot, resolvedPath);
+    if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
         throw new Error(`Security: Attempted to load file outside project directory: ${filepath}`);
     }
     
@@ -93,7 +95,7 @@ class TestRunner {
         console.log(`${colors.bold}${summaryColor}Tests: ${total} | Passed: ${this.totalPass} | Failed: ${this.totalFail}${colors.reset}\n`);
 
         // Return exit code for caller to handle
-        return this.totalFail > 0 ? 1 : 0;
+        return this.totalFail === 0 ? 0 : 1;
     }
 }
 
