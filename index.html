@@ -102,7 +102,16 @@
             <div class="modal-content">
                 <h2>Settings</h2>
                 
-                <h3 style="margin-top: 0; margin-bottom: 10px; font-size: 1rem; color: #555;">Custom Date Override</h3>
+                <h3 style="margin-top: 0; margin-bottom: 10px; font-size: 1rem; color: #555;">Display Options</h3>
+                <div class="form-group">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <input type="checkbox" id="collapse-sections-checkbox" style="width: auto;">
+                        <label for="collapse-sections-checkbox" style="margin: 0;">Group fully utilized/ignored items into collapsible sections</label>
+                    </div>
+                    <small style="color: #666;">When enabled, fully utilized and ignored benefits will be grouped into separate collapsed sections within each card, similar to the expiring soon widget.</small>
+                </div>
+                
+                <h3 style="margin-top: 20px; margin-bottom: 10px; font-size: 1rem; color: #555;">Custom Date Override</h3>
                 <div class="form-group">
                     <label for="custom-date-input">Override Current Date</label>
                     <div style="display: flex; gap: 10px; align-items: center;">
