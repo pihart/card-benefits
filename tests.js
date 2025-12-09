@@ -22,7 +22,8 @@ function loadModule(filepath) {
     
     // Check for directory traversal by ensuring resolved path is within project root
     const relativePath = path.relative(projectRoot, resolvedPath);
-    if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    // If relative path starts with '..' or contains it, the file is outside project root
+    if (relativePath.startsWith('..') || relativePath.includes(path.sep + '..')) {
         throw new Error(`Security: Attempted to load file outside project directory: ${filepath}`);
     }
     
@@ -39,14 +40,15 @@ loadModule(path.join(__dirname, 'models/Benefit.js'));
 loadModule(path.join(__dirname, 'models/Card.js'));
 loadModule(path.join(__dirname, 'dateUtils.js'));
 
-// ANSI color codes for terminal output
+// ANSI color codes for terminal output (ESC[<code>m format)
+// Using built-in codes to avoid external dependencies
 const colors = {
-    reset: '\x1b[0m',
-    green: '\x1b[32m',
-    red: '\x1b[31m',
-    yellow: '\x1b[33m',
-    blue: '\x1b[34m',
-    bold: '\x1b[1m'
+    reset: '\x1b[0m',   // Reset all styles
+    green: '\x1b[32m',  // Green text
+    red: '\x1b[31m',    // Red text
+    yellow: '\x1b[33m', // Yellow text
+    blue: '\x1b[34m',   // Blue text
+    bold: '\x1b[1m'     // Bold text
 };
 
 // Simple test framework
