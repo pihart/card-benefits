@@ -99,7 +99,10 @@
                 for (const suite of this.suites) {
                     const suiteDiv = document.createElement('div');
                     suiteDiv.className = 'test-suite';
-                    suiteDiv.innerHTML = `<h2>${suite.name}</h2>`;
+                    
+                    const suiteTitle = document.createElement('h2');
+                    suiteTitle.textContent = suite.name;
+                    suiteDiv.appendChild(suiteTitle);
 
                     for (const test of suite.tests) {
                         const testDiv = document.createElement('div');

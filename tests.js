@@ -15,8 +15,10 @@ const vm = require('vm');
 function loadModule(filepath) {
     // Validate file path to ensure it's within the project directory
     const resolvedPath = path.resolve(filepath);
+    // __dirname is the directory containing this test file, which is the project root
+    // Allow loading from project root and its subdirectories
     const projectRoot = path.resolve(__dirname);
-    if (!resolvedPath.startsWith(projectRoot)) {
+    if (!resolvedPath.startsWith(projectRoot + path.sep) && resolvedPath !== projectRoot) {
         throw new Error(`Security: Attempted to load file outside project directory: ${filepath}`);
     }
     
