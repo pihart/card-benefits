@@ -13,6 +13,13 @@ const path = require('path');
 const vm = require('vm');
 
 function loadModule(filepath) {
+    // Validate file path to ensure it's within the project directory
+    const resolvedPath = path.resolve(filepath);
+    const projectRoot = path.resolve(__dirname);
+    if (!resolvedPath.startsWith(projectRoot)) {
+        throw new Error(`Security: Attempted to load file outside project directory: ${filepath}`);
+    }
+    
     const code = fs.readFileSync(filepath, 'utf8');
     // Execute in the current global context
     vm.runInThisContext(code);
@@ -83,10 +90,8 @@ class TestRunner {
         const summaryColor = this.totalFail === 0 ? colors.green : colors.red;
         console.log(`${colors.bold}${summaryColor}Tests: ${total} | Passed: ${this.totalPass} | Failed: ${this.totalFail}${colors.reset}\n`);
 
-        // Exit with error code if any tests failed
-        if (this.totalFail > 0) {
-            process.exit(1);
-        }
+        // Return exit code for caller to handle
+        return this.totalFail > 0 ? 1 : 0;
     }
 }
 
@@ -715,7 +720,11 @@ runner.suite('Expiring Soon Detection', ({ test }) => {
 });
 
 // Run all tests
-runner.run().catch(err => {
-    console.error('Test runner failed:', err);
-    process.exit(1);
-});
+runner.run()
+    .then(exitCode => {
+        process.exit(exitCode);
+    })
+    .catch(err => {
+        console.error('Test runner failed:', err);
+        process.exit(1);
+    });

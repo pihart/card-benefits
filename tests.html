@@ -108,14 +108,24 @@
                         try {
                             await test.fn();
                             testDiv.classList.add('pass');
-                            testDiv.innerHTML = `<div class="test-name">✓ ${test.name}</div>`;
+                            const nameDiv = document.createElement('div');
+                            nameDiv.className = 'test-name';
+                            nameDiv.textContent = `✓ ${test.name}`;
+                            testDiv.appendChild(nameDiv);
                             totalPass++;
                         } catch (error) {
                             testDiv.classList.add('fail');
-                            testDiv.innerHTML = `
-                                <div class="test-name">✗ ${test.name}</div>
-                                <div class="test-error">${error.message}\n${error.stack}</div>
-                            `;
+                            
+                            const nameDiv = document.createElement('div');
+                            nameDiv.className = 'test-name';
+                            nameDiv.textContent = `✗ ${test.name}`;
+                            testDiv.appendChild(nameDiv);
+                            
+                            const errorDiv = document.createElement('div');
+                            errorDiv.className = 'test-error';
+                            errorDiv.textContent = `${error.message}\n${error.stack}`;
+                            testDiv.appendChild(errorDiv);
+                            
                             totalFail++;
                         }
                         
