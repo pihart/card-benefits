@@ -124,7 +124,8 @@ class BenefitTrackerApp {
             this.toggleLoading(false);
         }
 
-        // After loading data, set the default threshold to the nearest one with active entries
+        // After loading data, auto-select the optimal threshold (overrides the default 30)
+        // This only happens on page load; user selections will be preserved after that
         const defaultThreshold = this.findNearestThresholdWithActiveEntries();
         this.expiringDays = defaultThreshold;
         this.expiringDaysSelect.value = defaultThreshold.toString();

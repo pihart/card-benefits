@@ -949,12 +949,12 @@ runner.suite('Default Expiring Threshold', ({ test }) => {
         assertEquals(threshold, 7, 'Should return 7 days for minimum spend within that threshold');
     });
 
-    test('updateThresholdIfNeeded updates to nearest threshold when not user selected', () => {
+    test('updateThresholdIfNeeded updates to nearest threshold when user has not manually selected', () => {
         setupMockDOM();
         
         const app = new BenefitTrackerApp();
         app.today = new Date('2024-12-01');
-        app.userSelectedThreshold = false; // Ensure auto-update is enabled
+        app.userSelectedThreshold = false; // Auto-update is enabled (no user selection)
         
         const card = new Card({
             id: 'test-card',
@@ -976,7 +976,7 @@ runner.suite('Default Expiring Threshold', ({ test }) => {
         card.benefits.push(benefit);
         app.cards = [card];
         
-        // Set current threshold to 7 days (monthly calendar benefit resets on Jan 1, 31 days from Dec 1)
+        // Start with threshold at 7 days (too small for the benefit that resets on Jan 1, 31 days away)
         app.expiringDays = 7;
         app.expiringDaysSelect.value = '7';
         
