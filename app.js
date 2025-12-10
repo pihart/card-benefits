@@ -14,6 +14,7 @@ class BenefitTrackerApp {
         this.expiringDays = 30;
         this.pollInterval = 800;
         this.collapseSections = false; // Setting to group fully utilized/ignored items into sections
+        this.userSelectedThreshold = false; // Track if user manually selected a threshold
 
         // Concurrency Control
         this.pollAbortController = null;
@@ -52,6 +53,7 @@ class BenefitTrackerApp {
         this.addCardForm.addEventListener('submit', this.handleAddCard.bind(this));
         this.expiringDaysSelect.addEventListener('change', (e) => {
             this.expiringDays = parseInt(e.target.value, 10);
+            this.userSelectedThreshold = true; // Mark as user selection
             this.render();
         });
 
@@ -122,6 +124,12 @@ class BenefitTrackerApp {
         } finally {
             this.toggleLoading(false);
         }
+
+        // After loading data, auto-select the optimal threshold (overrides the default 30)
+        // This only happens on page load; user selections will be preserved after that
+        const defaultThreshold = this.findNearestThresholdWithActiveEntries();
+        this.expiringDays = defaultThreshold;
+        this.expiringDaysSelect.value = defaultThreshold.toString();
 
         this.initLiveSync();
 
@@ -502,6 +510,109 @@ class BenefitTrackerApp {
         }
     }
 
+    // --- Helper Methods for Default Threshold ---
+    /**
+     * Calculate the number of active (non-collapsed) entries for a given threshold.
+     * Active entries are benefits that are not fully used and not ignored.
+     * @param {number} days - The threshold in days
+     * @returns {number} - Count of active entries
+     */
+    calculateActiveEntriesForThreshold(days) {
+        let count = 0;
+        const limitDate = new Date(this.today.getTime());
+        limitDate.setDate(this.today.getDate() + days);
+
+        this.cards.forEach(card => {
+            // Count actionable minimum spends
+            if (card.minimumSpends) {
+                card.minimumSpends.forEach(minSpend => {
+                    const isActionable = minSpend.isActionable 
+                        ? minSpend.isActionable(this.today)
+                        : (!minSpend.isMet && !this.isMinimumSpendIgnored(minSpend));
+                    
+                    if (isActionable) {
+                        const deadline = minSpend.getDeadline 
+                            ? minSpend.getDeadline(this.today)
+                            : null;
+                        
+                        if (deadline && deadline > this.today && deadline <= limitDate) {
+                            count++;
+                        }
+                    }
+                });
+            }
+
+            card.benefits.forEach(benefit => {
+                // Handle carryover benefits separately
+                if (this._isCarryoverBenefit(benefit)) {
+                    const activeInstances = this.getActiveCarryoverInstances(benefit);
+                    activeInstances.forEach(instance => {
+                        const expiryDate = CarryoverCycle.calculateExpiryDate(instance.earnedDate);
+                        const rem = benefit.totalAmount - (instance.usedAmount || 0);
+                        
+                        // Only count if within limit, has remaining amount, and not ignored
+                        if (expiryDate > this.today && expiryDate <= limitDate && rem > 0 && !this.isIgnoredActive(benefit)) {
+                            count++;
+                        }
+                    });
+                    return;
+                }
+
+                const rem = benefit.totalAmount - benefit.usedAmount;
+                if (this._isOneTimeBenefit(benefit)) return;
+
+                const next = benefit.getNextResetDate 
+                    ? benefit.getNextResetDate(this.today)
+                    : DateUtils.calculateNextResetDate(benefit, card, this.today);
+
+                // Only count if within limit, has remaining amount, and not ignored
+                if (next > this.today && next <= limitDate && rem > 0 && !this.isIgnoredActive(benefit)) {
+                    count++;
+                }
+            });
+        });
+
+        return count;
+    }
+
+    /**
+     * Find the nearest (smallest) threshold with active entries.
+     * Checks thresholds in order: 7, 14, 30, 60, 90, 120 days.
+     * @returns {number} - The threshold in days, defaults to 30 if none have active entries
+     */
+    findNearestThresholdWithActiveEntries() {
+        const thresholds = [7, 14, 30, 60, 90, 120];
+        
+        for (const threshold of thresholds) {
+            if (this.calculateActiveEntriesForThreshold(threshold) > 0) {
+                return threshold;
+            }
+        }
+        
+        // Default to 30 if no threshold has active entries
+        return 30;
+    }
+
+    /**
+     * Updates the threshold to the nearest one with active entries.
+     * Only updates if the user hasn't manually selected a threshold.
+     */
+    updateThresholdIfNeeded() {
+        // Respect user's manual selection
+        if (this.userSelectedThreshold) {
+            return;
+        }
+        
+        // Find the nearest threshold with active entries
+        const newThreshold = this.findNearestThresholdWithActiveEntries();
+        
+        // Update if it's different from current
+        if (newThreshold !== this.expiringDays) {
+            this.expiringDays = newThreshold;
+            this.expiringDaysSelect.value = newThreshold.toString();
+        }
+    }
+
     // --- Rendering Proxy ---
     render() {
         const progressState = new Map();
@@ -557,6 +668,9 @@ class BenefitTrackerApp {
 
         const minSpendDetails = document.querySelector('.min-spend-section');
         if (minSpendDetails && minSpendDetails.hasAttribute('open')) minSpendSectionOpen = true;
+
+        // Update threshold to nearest option with active entries
+        this.updateThresholdIfNeeded();
 
         // 2. Calculate Data
         const expiringActive = [];

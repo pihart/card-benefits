@@ -730,6 +730,321 @@ runner.suite('Expiring Soon Detection', ({ test }) => {
     });
 });
 
+// Test Suite: Default Expiring Threshold
+runner.suite('Default Expiring Threshold', ({ test }) => {
+    // Mock the DOM elements required by the app
+    function setupMockDOM() {
+        // Create a minimal DOM mock for testing
+        global.document = {
+            getElementById: (id) => {
+                const mocks = {
+                    'loading-indicator': { style: {} },
+                    'card-list-container': { innerHTML: '', querySelectorAll: () => [] },
+                    'expiring-days-select': { value: '30', addEventListener: () => {} },
+                    'collapse-sections-checkbox': { checked: false, addEventListener: () => {} },
+                    'add-card-form': { addEventListener: () => {} },
+                    'show-add-card-btn': { style: {}, addEventListener: () => {} },
+                    'new-card-name': {},
+                    'new-card-anniversary': {},
+                    'settings-save': { onclick: null },
+                    's3-url-input': {},
+                    'poll-interval-input': {},
+                    'current-storage-label': { textContent: '' },
+                    'custom-date-input': { value: '', addEventListener: () => {} },
+                    'clear-custom-date-btn': { addEventListener: () => {} },
+                    'modal-ok': { onclick: null },
+                    'modal-cancel': { onclick: null },
+                    'settings-btn': { onclick: null },
+                    'settings-cancel': { onclick: null },
+                    'use-local-storage-btn': { onclick: null }
+                };
+                return mocks[id] || { addEventListener: () => {}, style: {}, textContent: '' };
+            },
+            querySelector: () => ({ addEventListener: () => {} }),
+            querySelectorAll: () => [],
+            addEventListener: () => {}
+        };
+        global.window = {
+            addEventListener: () => {}
+        };
+        global.localStorage = {
+            getItem: () => null,
+            setItem: () => {}
+        };
+    }
+
+    // Mock UIRenderer
+    global.UIRenderer = class {
+        constructor(app) {
+            this.app = app;
+        }
+    };
+
+    test('calculateActiveEntriesForThreshold with no benefits', () => {
+        setupMockDOM();
+        loadModule(path.join(__dirname, '../app.js'));
+        
+        const app = new BenefitTrackerApp();
+        app.cards = [];
+        app.today = new Date('2024-12-10');
+        
+        const count = app.calculateActiveEntriesForThreshold(30);
+        assertEquals(count, 0, 'Should have 0 active entries with no cards');
+    });
+
+    test('calculateActiveEntriesForThreshold with active benefits', () => {
+        setupMockDOM();
+        
+        const app = new BenefitTrackerApp();
+        app.today = new Date('2024-12-01');
+        
+        // Create a card with monthly benefit that will reset on 2025-01-01 (31 days away)
+        const card = new Card({
+            id: 'test-card',
+            name: 'Test Card',
+            anniversaryDate: '2024-01-01',
+            benefits: []
+        });
+        
+        const benefit = new Benefit({
+            id: 'test-benefit',
+            description: 'Monthly calendar credit',
+            totalAmount: 300,
+            usedAmount: 100,
+            frequency: 'monthly',
+            resetType: 'calendar',
+            lastReset: '2024-12-01'
+        });
+        
+        card.benefits.push(benefit);
+        app.cards = [card];
+        
+        // Benefit resets on 2025-01-01 (first day of next month), which is 31 days away
+        // So it should NOT be counted in the 30-day threshold
+        const count30 = app.calculateActiveEntriesForThreshold(30);
+        assertEquals(count30, 0, 'Should have 0 active entries within 30 days');
+        
+        // But it should be counted in the 60-day threshold
+        const count60 = app.calculateActiveEntriesForThreshold(60);
+        assertEquals(count60, 1, 'Should have 1 active entry within 60 days');
+    });
+
+    test('calculateActiveEntriesForThreshold ignores fully used benefits', () => {
+        setupMockDOM();
+        
+        const app = new BenefitTrackerApp();
+        app.today = new Date('2024-12-10');
+        
+        const card = new Card({
+            id: 'test-card',
+            name: 'Test Card',
+            anniversaryDate: '2024-12-15',
+            benefits: []
+        });
+        
+        // Fully used benefit (usedAmount equals totalAmount)
+        const fullyUsedBenefit = new Benefit({
+            id: 'fully-used',
+            description: 'Fully used credit',
+            totalAmount: 300,
+            usedAmount: 300,
+            frequency: 'annual',
+            resetType: 'anniversary',
+            lastReset: '2024-01-15'
+        });
+        
+        // Partially used benefit
+        const partiallyUsedBenefit = new Benefit({
+            id: 'partially-used',
+            description: 'Partially used credit',
+            totalAmount: 300,
+            usedAmount: 100,
+            frequency: 'annual',
+            resetType: 'anniversary',
+            lastReset: '2024-01-15'
+        });
+        
+        card.benefits.push(fullyUsedBenefit);
+        card.benefits.push(partiallyUsedBenefit);
+        app.cards = [card];
+        
+        // Reset is on Dec 15 (5 days from now)
+        const count7 = app.calculateActiveEntriesForThreshold(7);
+        // Only the partially used benefit should be counted
+        assertEquals(count7, 1, 'Should count only the partially used benefit');
+    });
+
+    test('findNearestThresholdWithActiveEntries returns 30 when no entries', () => {
+        setupMockDOM();
+        
+        const app = new BenefitTrackerApp();
+        app.cards = [];
+        app.today = new Date('2024-12-10');
+        
+        const threshold = app.findNearestThresholdWithActiveEntries();
+        assertEquals(threshold, 30, 'Should default to 30 days when no active entries');
+    });
+
+    test('findNearestThresholdWithActiveEntries returns smallest threshold', () => {
+        setupMockDOM();
+        
+        const app = new BenefitTrackerApp();
+        app.today = new Date('2024-12-18');
+        
+        const card = new Card({
+            id: 'test-card',
+            name: 'Test Card',
+            anniversaryDate: '2024-01-01',
+            benefits: []
+        });
+        
+        // Benefit resets on Jan 1 (14 days from Dec 18)
+        const benefit = new Benefit({
+            id: 'test-benefit',
+            description: 'Monthly calendar credit',
+            totalAmount: 300,
+            usedAmount: 100,
+            frequency: 'monthly',
+            resetType: 'calendar',
+            lastReset: '2024-12-01'
+        });
+        
+        card.benefits.push(benefit);
+        app.cards = [card];
+        
+        // Should return 14 since the benefit resets in 14 days (within 14 but not within 7)
+        const threshold = app.findNearestThresholdWithActiveEntries();
+        assertEquals(threshold, 14, 'Should return 14 days as nearest threshold with active entries');
+    });
+
+    test('findNearestThresholdWithActiveEntries with minimum spend', () => {
+        setupMockDOM();
+        
+        const app = new BenefitTrackerApp();
+        app.today = new Date('2024-12-10');
+        
+        const card = new Card({
+            id: 'test-card',
+            name: 'Test Card',
+            anniversaryDate: '2024-01-15',
+            benefits: []
+        });
+        
+        // Add minimum spend with deadline in 5 days (one-time with explicit deadline)
+        const minSpend = new MinimumSpend({
+            id: 'test-min-spend',
+            description: 'Spend requirement',
+            targetAmount: 1000,
+            currentAmount: 500,
+            frequency: 'one-time',
+            deadline: '2024-12-15',
+            isMet: false
+        });
+        
+        card.minimumSpends = [minSpend];
+        app.cards = [card];
+        
+        // Should return 7 since the min spend deadline is within 7 days
+        const threshold = app.findNearestThresholdWithActiveEntries();
+        assertEquals(threshold, 7, 'Should return 7 days for minimum spend within that threshold');
+    });
+
+    test('updateThresholdIfNeeded updates to nearest threshold when user has not manually selected', () => {
+        setupMockDOM();
+        
+        const app = new BenefitTrackerApp();
+        app.today = new Date('2024-12-01');
+        app.userSelectedThreshold = false; // Auto-update is enabled (no user selection)
+        
+        const card = new Card({
+            id: 'test-card',
+            name: 'Test Card',
+            anniversaryDate: '2024-01-01',
+            benefits: []
+        });
+        
+        const benefit = new Benefit({
+            id: 'test-benefit',
+            description: 'Monthly calendar credit',
+            totalAmount: 300,
+            usedAmount: 100,
+            frequency: 'monthly',
+            resetType: 'calendar',
+            lastReset: '2024-12-01'
+        });
+        
+        card.benefits.push(benefit);
+        app.cards = [card];
+        
+        // Start with threshold at 7 days (too small for the benefit that resets on Jan 1, 31 days away)
+        app.expiringDays = 7;
+        app.expiringDaysSelect.value = '7';
+        
+        // Update threshold - should change to 60 since that's the nearest threshold with entries
+        app.updateThresholdIfNeeded();
+        
+        assertEquals(app.expiringDays, 60, 'Should update to nearest threshold (60 days)');
+        assertEquals(app.expiringDaysSelect.value, '60', 'Dropdown should be at 60');
+    });
+
+    test('updateThresholdIfNeeded respects user selection', () => {
+        setupMockDOM();
+        
+        const app = new BenefitTrackerApp();
+        app.today = new Date('2024-12-01');
+        app.userSelectedThreshold = true; // User has manually selected
+        
+        const card = new Card({
+            id: 'test-card',
+            name: 'Test Card',
+            anniversaryDate: '2024-01-01',
+            benefits: []
+        });
+        
+        const benefit = new Benefit({
+            id: 'test-benefit',
+            description: 'Monthly calendar credit',
+            totalAmount: 300,
+            usedAmount: 100,
+            frequency: 'monthly',
+            resetType: 'calendar',
+            lastReset: '2024-12-01'
+        });
+        
+        card.benefits.push(benefit);
+        app.cards = [card];
+        
+        // User selected 7 days (even though benefit resets in 31 days)
+        app.expiringDays = 7;
+        app.expiringDaysSelect.value = '7';
+        
+        // Update threshold - should NOT change because user selected
+        app.updateThresholdIfNeeded();
+        
+        assertEquals(app.expiringDays, 7, 'Should keep user-selected threshold (7 days)');
+        assertEquals(app.expiringDaysSelect.value, '7', 'Dropdown should remain at user selection');
+    });
+
+    test('updateThresholdIfNeeded updates to 30 when no threshold has entries', () => {
+        setupMockDOM();
+        
+        const app = new BenefitTrackerApp();
+        app.today = new Date('2024-12-01');
+        app.userSelectedThreshold = false; // Ensure auto-update is enabled
+        app.cards = [];
+        
+        // Set current threshold to 7 days (no benefits at all)
+        app.expiringDays = 7;
+        app.expiringDaysSelect.value = '7';
+        
+        // Update threshold - should change to default 30
+        app.updateThresholdIfNeeded();
+        
+        assertEquals(app.expiringDays, 30, 'Should update to default 30 when no entries');
+        assertEquals(app.expiringDaysSelect.value, '30', 'Dropdown should be set to 30');
+    });
+});
+
 // Run all tests
 runner.run()
     .then(exitCode => {
