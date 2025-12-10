@@ -18,6 +18,7 @@ class BenefitTrackerApp {
         // Concurrency Control
         this.pollAbortController = null;
         this.isSaving = false;
+        this.lastProgressState = new Map();
 
         // Core References
         this.loadingIndicator = document.getElementById('loading-indicator');
@@ -503,6 +504,22 @@ class BenefitTrackerApp {
 
     // --- Rendering Proxy ---
     render() {
+        const progressState = new Map();
+        this.cardListContainer.querySelectorAll('.progress-bar-inner').forEach(el => {
+            let key = el.dataset.progressKey;
+            if (!key) {
+                const benefitParent = el.closest('[data-benefit-id]');
+                const minSpendParent = el.closest('[data-min-spend-id]');
+                if (benefitParent) key = `benefit:${benefitParent.dataset.benefitId}`;
+                else if (minSpendParent) key = `minSpend:${minSpendParent.dataset.minSpendId}`;
+            }
+            if (key) {
+                const widthVal = parseFloat(el.style.width);
+                if (!isNaN(widthVal)) progressState.set(key, widthVal);
+            }
+        });
+        this.lastProgressState = progressState;
+
         // 1. SNAPSHOT UI STATE
         const cardState = new Map();
         const benefitState = new Map();
