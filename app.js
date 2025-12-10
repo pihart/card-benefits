@@ -13,6 +13,7 @@ class BenefitTrackerApp {
         this.today = new Date();
         this.expiringDays = 30;
         this.pollInterval = 800;
+        this.collapseSections = false; // Setting to group fully utilized/ignored items into sections
 
         // Concurrency Control
         this.pollAbortController = null;
@@ -39,6 +40,9 @@ class BenefitTrackerApp {
         // Custom Date References
         this.customDateInput = document.getElementById('custom-date-input');
         this.clearCustomDateBtn = document.getElementById('clear-custom-date-btn');
+        
+        // Display Options References
+        this.collapseSectionsCheckbox = document.getElementById('collapse-sections-checkbox');
 
         this.initListeners();
     }
@@ -66,6 +70,8 @@ class BenefitTrackerApp {
             // Populate custom date input with stored value
             const storedCustomDate = localStorage.getItem('creditCardBenefitTracker_customDate');
             this.customDateInput.value = storedCustomDate || '';
+            // Populate collapse sections checkbox
+            this.collapseSectionsCheckbox.checked = this.collapseSections;
             document.getElementById('settings-modal').style.display = 'flex';
         };
         document.getElementById('settings-cancel').onclick = () => document.getElementById('settings-modal').style.display = 'none';
@@ -75,6 +81,9 @@ class BenefitTrackerApp {
         // Custom Date Listeners
         this.customDateInput.addEventListener('change', this.handleCustomDateChange.bind(this));
         this.clearCustomDateBtn.addEventListener('click', this.handleClearCustomDate.bind(this));
+        
+        // Collapse Sections Listener
+        this.collapseSectionsCheckbox.addEventListener('change', this.handleCollapseSectionsChange.bind(this));
     }
 
     // ... (init and initLiveSync unchanged) ...
@@ -86,6 +95,10 @@ class BenefitTrackerApp {
 
         const storedInterval = localStorage.getItem('creditCardBenefitTracker_pollInterval');
         if (storedInterval) this.pollInterval = parseInt(storedInterval, 10);
+        
+        // Load collapse sections setting
+        const storedCollapseSections = localStorage.getItem('creditCardBenefitTracker_collapseSections');
+        this.collapseSections = storedCollapseSections === 'true';
 
         const cloudConfig = localStorage.getItem('creditCardBenefitTracker_config');
         if (cloudConfig) {
@@ -493,6 +506,8 @@ class BenefitTrackerApp {
         // 1. SNAPSHOT UI STATE
         const cardState = new Map();
         const benefitState = new Map();
+        const cardIgnoredSectionState = new Map();
+        const cardFullyUsedSectionState = new Map();
         let ignoredSectionOpen = false;
         let fullyUsedSectionOpen = false;
         let minSpendSectionOpen = false;
@@ -500,6 +515,15 @@ class BenefitTrackerApp {
 
         this.cardListContainer.querySelectorAll('.card').forEach(el => {
             cardState.set(el.dataset.cardId, el.classList.contains('card-collapsed'));
+            // Snapshot benefit section states for each card
+            const ignoredSection = el.querySelector('.card-ignored-section');
+            if (ignoredSection) {
+                cardIgnoredSectionState.set(el.dataset.cardId, ignoredSection.hasAttribute('open'));
+            }
+            const fullyUsedSection = el.querySelector('.card-fully-used-section');
+            if (fullyUsedSection) {
+                cardFullyUsedSectionState.set(el.dataset.cardId, fullyUsedSection.hasAttribute('open'));
+            }
         });
         this.cardListContainer.querySelectorAll('.benefit-item').forEach(el => {
             benefitState.set(el.dataset.benefitId, el.classList.contains('benefit-used'));
@@ -629,25 +653,109 @@ class BenefitTrackerApp {
                 isCardCollapsed = cardState.get(card.id);
             }
 
-            const cardEl = this.ui.createCardElement(card, isCardCollapsed);
+            const cardEl = this.ui.createCardElement(card, isCardCollapsed, this.collapseSections);
             const benefitList = cardEl.querySelector('.benefit-list');
             benefitList.innerHTML = '';
 
             if (card.benefits.length > 0) {
-                card.benefits.forEach(benefit => {
-                    // Use Benefit method if available
-                    const isUsed = benefit.isFullyUsed 
-                        ? benefit.isFullyUsed(this.today)
-                        : (benefit.totalAmount - benefit.usedAmount) <= 0;
-                    const isIgnored = this.isIgnoredActive(benefit);
-                    let isBenefitCollapsed = isUsed || isIgnored;
-
-                    if (benefitState.has(benefit.id)) {
-                        isBenefitCollapsed = benefitState.get(benefit.id);
+                if (this.collapseSections) {
+                    // Group benefits into sections
+                    const activeBenefits = [];
+                    const ignoredBenefits = [];
+                    const fullyUsedBenefits = [];
+                    
+                    card.benefits.forEach(benefit => {
+                        const isUsed = benefit.isFullyUsed 
+                            ? benefit.isFullyUsed(this.today)
+                            : (benefit.totalAmount - benefit.usedAmount) <= 0;
+                        const isIgnored = this.isIgnoredActive(benefit);
+                        
+                        if (isIgnored) {
+                            ignoredBenefits.push(benefit);
+                        } else if (isUsed) {
+                            fullyUsedBenefits.push(benefit);
+                        } else {
+                            activeBenefits.push(benefit);
+                        }
+                    });
+                    
+                    // Render active benefits directly in the list
+                    activeBenefits.forEach(benefit => {
+                        let isBenefitCollapsed = false;
+                        if (benefitState.has(benefit.id)) {
+                            isBenefitCollapsed = benefitState.get(benefit.id);
+                        }
+                        benefitList.appendChild(this.ui.createBenefitElement(benefit, card, isBenefitCollapsed, false));
+                    });
+                    
+                    // Create ignored section if there are ignored benefits
+                    if (ignoredBenefits.length > 0) {
+                        const ignoredSection = document.createElement('details');
+                        ignoredSection.className = 'benefit-subsection card-ignored-section';
+                        if (cardIgnoredSectionState.has(card.id) && cardIgnoredSectionState.get(card.id)) {
+                            ignoredSection.setAttribute('open', 'true');
+                        }
+                        
+                        const summary = document.createElement('summary');
+                        summary.textContent = `🚫 Ignored Benefits (${ignoredBenefits.length})`;
+                        ignoredSection.appendChild(summary);
+                        
+                        const sectionList = document.createElement('ul');
+                        sectionList.className = 'benefit-list';
+                        ignoredBenefits.forEach(benefit => {
+                            // Don't allow per-item collapse within sections
+                            sectionList.appendChild(this.ui.createBenefitElement(benefit, card, false, true));
+                        });
+                        ignoredSection.appendChild(sectionList);
+                        
+                        const sectionWrapper = document.createElement('li');
+                        sectionWrapper.style.listStyle = 'none';
+                        sectionWrapper.appendChild(ignoredSection);
+                        benefitList.appendChild(sectionWrapper);
                     }
+                    
+                    // Create fully used section if there are fully used benefits
+                    if (fullyUsedBenefits.length > 0) {
+                        const fullyUsedSection = document.createElement('details');
+                        fullyUsedSection.className = 'benefit-subsection card-fully-used-section';
+                        if (cardFullyUsedSectionState.has(card.id) && cardFullyUsedSectionState.get(card.id)) {
+                            fullyUsedSection.setAttribute('open', 'true');
+                        }
+                        
+                        const summary = document.createElement('summary');
+                        summary.textContent = `✅ Fully Utilized (${fullyUsedBenefits.length})`;
+                        fullyUsedSection.appendChild(summary);
+                        
+                        const sectionList = document.createElement('ul');
+                        sectionList.className = 'benefit-list';
+                        fullyUsedBenefits.forEach(benefit => {
+                            // Don't allow per-item collapse within sections
+                            sectionList.appendChild(this.ui.createBenefitElement(benefit, card, false, true));
+                        });
+                        fullyUsedSection.appendChild(sectionList);
+                        
+                        const sectionWrapper = document.createElement('li');
+                        sectionWrapper.style.listStyle = 'none';
+                        sectionWrapper.appendChild(fullyUsedSection);
+                        benefitList.appendChild(sectionWrapper);
+                    }
+                } else {
+                    // Original behavior - render all benefits with individual collapse
+                    card.benefits.forEach(benefit => {
+                        // Use Benefit method if available
+                        const isUsed = benefit.isFullyUsed 
+                            ? benefit.isFullyUsed(this.today)
+                            : (benefit.totalAmount - benefit.usedAmount) <= 0;
+                        const isIgnored = this.isIgnoredActive(benefit);
+                        let isBenefitCollapsed = isUsed || isIgnored;
 
-                    benefitList.appendChild(this.ui.createBenefitElement(benefit, card, isBenefitCollapsed));
-                });
+                        if (benefitState.has(benefit.id)) {
+                            isBenefitCollapsed = benefitState.get(benefit.id);
+                        }
+
+                        benefitList.appendChild(this.ui.createBenefitElement(benefit, card, isBenefitCollapsed, false));
+                    });
+                }
             } else {
                 benefitList.innerHTML = '<li>No benefits added for this card yet.</li>';
             }
@@ -1129,6 +1237,12 @@ class BenefitTrackerApp {
         localStorage.removeItem('creditCardBenefitTracker_customDate');
         this.setCurrentDate(null);
         this.refreshBenefitsAndRender();
+    }
+    
+    handleCollapseSectionsChange(e) {
+        this.collapseSections = e.target.checked;
+        localStorage.setItem('creditCardBenefitTracker_collapseSections', this.collapseSections);
+        this.render();
     }
 }
 

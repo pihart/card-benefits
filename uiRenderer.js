@@ -139,7 +139,7 @@ class UIRenderer {
         }
     }
 
-    createCardElement(card, isCollapsed) {
+    createCardElement(card, isCollapsed, collapseSections = false) {
         const cardDiv = document.createElement('div');
         cardDiv.className = 'card';
         cardDiv.dataset.cardId = card.id;
@@ -735,7 +735,7 @@ class UIRenderer {
         };
     }
 
-    createBenefitElement(benefit, card, isCollapsed) {
+    createBenefitElement(benefit, card, isCollapsed, disablePerItemCollapse = false) {
         const li = document.createElement('li');
         li.className = 'benefit-item';
         li.dataset.benefitId = benefit.id;
@@ -771,9 +771,12 @@ class UIRenderer {
             isUsed = remaining <= 0;
         }
 
-        if (isCollapsed) li.classList.add('benefit-used');
+        if (isCollapsed && !disablePerItemCollapse) li.classList.add('benefit-used');
         if (isIgnored) li.classList.add('benefit-ignored');
         if (isLockedByMinSpend) li.classList.add('benefit-locked');
+        
+        // Mark benefits in sections to disable per-item collapse
+        if (disablePerItemCollapse) li.classList.add('benefit-in-section');
 
         // Details
         const detailsDiv = document.createElement('div');
@@ -856,7 +859,10 @@ class UIRenderer {
             if (e.target.closest('.smart-stepper-btn')) return;
             if (e.target.closest('.draggable-benefit-handle')) return; // Don't toggle on handle click
             if (e.target.tagName === 'INPUT') return;
-            li.classList.toggle('benefit-used');
+            // Don't allow per-item collapse within sections
+            if (!disablePerItemCollapse) {
+                li.classList.toggle('benefit-used');
+            }
         };
 
         // Meta
