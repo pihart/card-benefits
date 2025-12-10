@@ -949,48 +949,12 @@ runner.suite('Default Expiring Threshold', ({ test }) => {
         assertEquals(threshold, 7, 'Should return 7 days for minimum spend within that threshold');
     });
 
-    test('updateThresholdIfNeeded updates to nearest threshold even when current has entries', () => {
+    test('updateThresholdIfNeeded updates to nearest threshold when not user selected', () => {
         setupMockDOM();
         
         const app = new BenefitTrackerApp();
         app.today = new Date('2024-12-01');
-        
-        const card = new Card({
-            id: 'test-card',
-            name: 'Test Card',
-            anniversaryDate: '2024-01-01',
-            benefits: []
-        });
-        
-        const benefit = new Benefit({
-            id: 'test-benefit',
-            description: 'Monthly calendar credit',
-            totalAmount: 300,
-            usedAmount: 100,
-            frequency: 'monthly',
-            resetType: 'calendar',
-            lastReset: '2024-12-01'
-        });
-        
-        card.benefits.push(benefit);
-        app.cards = [card];
-        
-        // Set current threshold to 60 days (monthly calendar benefit resets on Jan 1, 31 days from Dec 1)
-        app.expiringDays = 60;
-        app.expiringDaysSelect.value = '60';
-        
-        // Update threshold - should stay at 60 since that's the nearest threshold with entries
-        app.updateThresholdIfNeeded();
-        
-        assertEquals(app.expiringDays, 60, 'Should update to nearest threshold (60 days)');
-        assertEquals(app.expiringDaysSelect.value, '60', 'Dropdown should be at 60');
-    });
-
-    test('updateThresholdIfNeeded updates from smaller threshold to nearest with entries', () => {
-        setupMockDOM();
-        
-        const app = new BenefitTrackerApp();
-        app.today = new Date('2024-12-01');
+        app.userSelectedThreshold = false; // Ensure auto-update is enabled
         
         const card = new Card({
             id: 'test-card',
@@ -1016,11 +980,49 @@ runner.suite('Default Expiring Threshold', ({ test }) => {
         app.expiringDays = 7;
         app.expiringDaysSelect.value = '7';
         
-        // Update threshold - should change to 60 (nearest threshold with entries)
+        // Update threshold - should change to 60 since that's the nearest threshold with entries
         app.updateThresholdIfNeeded();
         
         assertEquals(app.expiringDays, 60, 'Should update to nearest threshold (60 days)');
-        assertEquals(app.expiringDaysSelect.value, '60', 'Dropdown should match new threshold');
+        assertEquals(app.expiringDaysSelect.value, '60', 'Dropdown should be at 60');
+    });
+
+    test('updateThresholdIfNeeded respects user selection', () => {
+        setupMockDOM();
+        
+        const app = new BenefitTrackerApp();
+        app.today = new Date('2024-12-01');
+        app.userSelectedThreshold = true; // User has manually selected
+        
+        const card = new Card({
+            id: 'test-card',
+            name: 'Test Card',
+            anniversaryDate: '2024-01-01',
+            benefits: []
+        });
+        
+        const benefit = new Benefit({
+            id: 'test-benefit',
+            description: 'Monthly calendar credit',
+            totalAmount: 300,
+            usedAmount: 100,
+            frequency: 'monthly',
+            resetType: 'calendar',
+            lastReset: '2024-12-01'
+        });
+        
+        card.benefits.push(benefit);
+        app.cards = [card];
+        
+        // User selected 7 days (even though benefit resets in 31 days)
+        app.expiringDays = 7;
+        app.expiringDaysSelect.value = '7';
+        
+        // Update threshold - should NOT change because user selected
+        app.updateThresholdIfNeeded();
+        
+        assertEquals(app.expiringDays, 7, 'Should keep user-selected threshold (7 days)');
+        assertEquals(app.expiringDaysSelect.value, '7', 'Dropdown should remain at user selection');
     });
 
     test('updateThresholdIfNeeded updates to 30 when no threshold has entries', () => {
@@ -1028,6 +1030,7 @@ runner.suite('Default Expiring Threshold', ({ test }) => {
         
         const app = new BenefitTrackerApp();
         app.today = new Date('2024-12-01');
+        app.userSelectedThreshold = false; // Ensure auto-update is enabled
         app.cards = [];
         
         // Set current threshold to 7 days (no benefits at all)

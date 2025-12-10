@@ -14,6 +14,7 @@ class BenefitTrackerApp {
         this.expiringDays = 30;
         this.pollInterval = 800;
         this.collapseSections = false; // Setting to group fully utilized/ignored items into sections
+        this.userSelectedThreshold = false; // Track if user manually selected a threshold
 
         // Concurrency Control
         this.pollAbortController = null;
@@ -51,6 +52,7 @@ class BenefitTrackerApp {
         this.addCardForm.addEventListener('submit', this.handleAddCard.bind(this));
         this.expiringDaysSelect.addEventListener('change', (e) => {
             this.expiringDays = parseInt(e.target.value, 10);
+            this.userSelectedThreshold = true; // Mark as user selection
             this.render();
         });
 
@@ -591,9 +593,14 @@ class BenefitTrackerApp {
 
     /**
      * Updates the threshold to the nearest one with active entries.
-     * Always recomputes to find the optimal threshold as data changes.
+     * Only updates if the user hasn't manually selected a threshold.
      */
     updateThresholdIfNeeded() {
+        // Respect user's manual selection
+        if (this.userSelectedThreshold) {
+            return;
+        }
+        
         // Find the nearest threshold with active entries
         const newThreshold = this.findNearestThresholdWithActiveEntries();
         
