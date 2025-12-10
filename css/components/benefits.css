@@ -382,3 +382,72 @@ input[type=number] {
 .show-add-min-spend-btn {
     width: 100%;
 }
+
+/* --- Benefit Subsections (for grouped fully utilized/ignored items) --- */
+.benefit-subsection {
+    margin-top: 15px;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    padding-top: 10px;
+}
+
+.benefit-subsection summary {
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 0.95rem;
+    color: var(--dark-gray);
+    opacity: 0.8;
+    margin-bottom: 10px;
+    outline: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+}
+
+.benefit-subsection summary::-webkit-details-marker {
+    display: none;
+}
+
+/* Add custom arrow */
+.benefit-subsection summary::before {
+    content: '▶';
+    font-size: 0.7rem;
+    margin-right: 8px;
+    transition: transform 0.2s;
+    display: inline-block;
+}
+
+.benefit-subsection[open] summary::before {
+    transform: rotate(90deg);
+}
+
+.benefit-subsection .benefit-list {
+    margin-top: 10px;
+}
+
+.benefit-subsection .benefit-item {
+    opacity: 0.8;
+    background-color: rgba(0, 0, 0, 0.02);
+}
+
+.benefit-subsection.card-fully-used-section summary {
+    color: var(--success);
+}
+
+.benefit-subsection.card-ignored-section summary {
+    color: var(--secondary-color);
+}
+
+/* Disable collapse behavior for benefits in sections */
+.benefit-item.benefit-in-section .details {
+    cursor: default;
+}
+
+/* Benefits in sections should always be expanded */
+.benefit-item.benefit-in-section .meta,
+.benefit-item.benefit-in-section .next-reset,
+.benefit-item.benefit-in-section .benefit-controls,
+.benefit-item.benefit-in-section .edit-form {
+    max-height: 500px !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
