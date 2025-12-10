@@ -21,4 +21,4 @@ jobs:
         node-version: '20'
     
     - name: Run tests
-      run: node tests.js
+      run: node tests/tests.js

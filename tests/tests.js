@@ -16,8 +16,8 @@ const vm = require('vm');
 
 function loadModule(filepath) {
     // Validate file path to ensure it's within the project directory
-    // __dirname is the directory containing this test file (project root)
-    const projectRoot = path.resolve(__dirname);
+    // __dirname is the tests directory, project root is one level up
+    const projectRoot = path.resolve(__dirname, '..');
     const resolvedPath = path.resolve(filepath);
     
     // Check for directory traversal by ensuring resolved path is within project root
@@ -35,12 +35,13 @@ function loadModule(filepath) {
 }
 
 // Load all required modules in dependency order
-loadModule(path.join(__dirname, 'models/ExpiryCycle.js'));
-loadModule(path.join(__dirname, 'models/CarryoverCycle.js'));
-loadModule(path.join(__dirname, 'models/MinimumSpend.js'));
-loadModule(path.join(__dirname, 'models/Benefit.js'));
-loadModule(path.join(__dirname, 'models/Card.js'));
-loadModule(path.join(__dirname, 'dateUtils.js'));
+// __dirname is the tests directory, so we need to go up one level to reach project root
+loadModule(path.join(__dirname, '../models/ExpiryCycle.js'));
+loadModule(path.join(__dirname, '../models/CarryoverCycle.js'));
+loadModule(path.join(__dirname, '../models/MinimumSpend.js'));
+loadModule(path.join(__dirname, '../models/Benefit.js'));
+loadModule(path.join(__dirname, '../models/Card.js'));
+loadModule(path.join(__dirname, '../dateUtils.js'));
 
 // ANSI color codes for terminal output (ESC[<code>m format)
 // Using built-in codes to avoid external dependencies

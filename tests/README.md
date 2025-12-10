@@ -4,30 +4,13 @@ This directory contains comprehensive unit tests for the Card Benefits applicati
 
 ## Running the Tests
 
-### Option 1: Node.js (Recommended for CI/CD)
-
 Run the tests from the command line:
 
 ```bash
-node tests.js
+node tests/tests.js
 ```
 
 The tests will run and display results in the terminal with colored output.
-
-### Option 2: Browser
-
-Open `tests.html` in a web browser to see an interactive test results page.
-
-```bash
-# On macOS
-open tests.html
-
-# On Linux
-xdg-open tests.html
-
-# On Windows
-start tests.html
-```
 
 ## Test Coverage
 
@@ -92,7 +75,7 @@ The tests use a simple, custom test framework with the following assertion metho
 
 ## Exit Codes
 
-When running `tests.js`:
+When running `tests/tests.js`:
 - Exit code `0` - All tests passed
 - Exit code `1` - One or more tests failed
 
