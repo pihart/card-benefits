@@ -589,6 +589,21 @@ class BenefitTrackerApp {
         return 30;
     }
 
+    /**
+     * Updates the threshold to the nearest one with active entries.
+     * Always recomputes to find the optimal threshold as data changes.
+     */
+    updateThresholdIfNeeded() {
+        // Find the nearest threshold with active entries
+        const newThreshold = this.findNearestThresholdWithActiveEntries();
+        
+        // Update if it's different from current
+        if (newThreshold !== this.expiringDays) {
+            this.expiringDays = newThreshold;
+            this.expiringDaysSelect.value = newThreshold.toString();
+        }
+    }
+
     // --- Rendering Proxy ---
     render() {
         // 1. SNAPSHOT UI STATE
@@ -628,6 +643,9 @@ class BenefitTrackerApp {
 
         const minSpendDetails = document.querySelector('.min-spend-section');
         if (minSpendDetails && minSpendDetails.hasAttribute('open')) minSpendSectionOpen = true;
+
+        // Update threshold if current selection has no active entries
+        this.updateThresholdIfNeeded();
 
         // 2. Calculate Data
         const expiringActive = [];
