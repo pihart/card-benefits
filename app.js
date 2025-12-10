@@ -19,7 +19,6 @@ class BenefitTrackerApp {
         this.pollAbortController = null;
         this.isSaving = false;
         this.lastProgressState = new Map();
-        this.hasRendered = false;
 
         // Core References
         this.loadingIndicator = document.getElementById('loading-indicator');
@@ -781,7 +780,6 @@ class BenefitTrackerApp {
         });
 
         this.initSortables();
-        this.hasRendered = true;
     }
 
     // ... (Handlers same as before) ...
