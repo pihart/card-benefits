@@ -644,7 +644,7 @@ class BenefitTrackerApp {
         const minSpendDetails = document.querySelector('.min-spend-section');
         if (minSpendDetails && minSpendDetails.hasAttribute('open')) minSpendSectionOpen = true;
 
-        // Update threshold if current selection has no active entries
+        // Update threshold to nearest option with active entries
         this.updateThresholdIfNeeded();
 
         // 2. Calculate Data

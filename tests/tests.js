@@ -975,7 +975,7 @@ runner.suite('Default Expiring Threshold', ({ test }) => {
         card.benefits.push(benefit);
         app.cards = [card];
         
-        // Set current threshold to 60 days (benefit resets in 31 days, so nearest should be 60)
+        // Set current threshold to 60 days (monthly calendar benefit resets on Jan 1, 31 days from Dec 1)
         app.expiringDays = 60;
         app.expiringDaysSelect.value = '60';
         
@@ -1012,7 +1012,7 @@ runner.suite('Default Expiring Threshold', ({ test }) => {
         card.benefits.push(benefit);
         app.cards = [card];
         
-        // Set current threshold to 7 days (benefit resets in 31 days, so nearest should be 60)
+        // Set current threshold to 7 days (monthly calendar benefit resets on Jan 1, 31 days from Dec 1)
         app.expiringDays = 7;
         app.expiringDaysSelect.value = '7';
         
