@@ -49,7 +49,7 @@ class UIRenderer {
 
         const lastState = this.app.lastProgressState;
         const prevVal = key && lastState?.has(key) ? parseFloat(lastState.get(key)) : NaN;
-        const startWidth = isNaN(prevVal) ? 0 : prevVal;
+        const startWidth = this.app.hasRendered ? (isNaN(prevVal) ? 0 : prevVal) : 0;
 
         const clampedTarget = Math.max(0, Math.min(targetPercent, 100));
         bar.style.backgroundColor = color;
