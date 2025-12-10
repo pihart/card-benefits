@@ -122,6 +122,11 @@ class BenefitTrackerApp {
             this.toggleLoading(false);
         }
 
+        // After loading data, set the default threshold to the nearest one with active entries
+        const defaultThreshold = this.findNearestThresholdWithActiveEntries();
+        this.expiringDays = defaultThreshold;
+        this.expiringDaysSelect.value = defaultThreshold.toString();
+
         this.initLiveSync();
 
         // Check for resets
@@ -499,6 +504,89 @@ class BenefitTrackerApp {
             }
             this.saveState();
         }
+    }
+
+    // --- Helper Methods for Default Threshold ---
+    /**
+     * Calculate the number of active (non-collapsed) entries for a given threshold.
+     * Active entries are benefits that are not fully used and not ignored.
+     * @param {number} days - The threshold in days
+     * @returns {number} - Count of active entries
+     */
+    calculateActiveEntriesForThreshold(days) {
+        let count = 0;
+        const limitDate = new Date(this.today.getTime());
+        limitDate.setDate(this.today.getDate() + days);
+
+        this.cards.forEach(card => {
+            // Count actionable minimum spends
+            if (card.minimumSpends) {
+                card.minimumSpends.forEach(minSpend => {
+                    const isActionable = minSpend.isActionable 
+                        ? minSpend.isActionable(this.today)
+                        : (!minSpend.isMet && !this.isMinimumSpendIgnored(minSpend));
+                    
+                    if (isActionable) {
+                        const deadline = minSpend.getDeadline 
+                            ? minSpend.getDeadline(this.today)
+                            : null;
+                        
+                        if (deadline && deadline > this.today && deadline <= limitDate) {
+                            count++;
+                        }
+                    }
+                });
+            }
+
+            card.benefits.forEach(benefit => {
+                // Handle carryover benefits separately
+                if (this._isCarryoverBenefit(benefit)) {
+                    const activeInstances = this.getActiveCarryoverInstances(benefit);
+                    activeInstances.forEach(instance => {
+                        const expiryDate = CarryoverCycle.calculateExpiryDate(instance.earnedDate);
+                        const rem = benefit.totalAmount - (instance.usedAmount || 0);
+                        
+                        // Only count if within limit, has remaining amount, and not ignored
+                        if (expiryDate > this.today && expiryDate <= limitDate && rem > 0 && !this.isIgnoredActive(benefit)) {
+                            count++;
+                        }
+                    });
+                    return;
+                }
+
+                const rem = benefit.totalAmount - benefit.usedAmount;
+                if (this._isOneTimeBenefit(benefit)) return;
+
+                const next = benefit.getNextResetDate 
+                    ? benefit.getNextResetDate(this.today)
+                    : DateUtils.calculateNextResetDate(benefit, card, this.today);
+
+                // Only count if within limit, has remaining amount, and not ignored
+                if (next > this.today && next <= limitDate && rem > 0 && !this.isIgnoredActive(benefit)) {
+                    count++;
+                }
+            });
+        });
+
+        return count;
+    }
+
+    /**
+     * Find the nearest (smallest) threshold with active entries.
+     * Checks thresholds in order: 7, 14, 30, 60, 90, 120 days.
+     * @returns {number} - The threshold in days, defaults to 30 if none have active entries
+     */
+    findNearestThresholdWithActiveEntries() {
+        const thresholds = [7, 14, 30, 60, 90, 120];
+        
+        for (const threshold of thresholds) {
+            if (this.calculateActiveEntriesForThreshold(threshold) > 0) {
+                return threshold;
+            }
+        }
+        
+        // Default to 30 if no threshold has active entries
+        return 30;
     }
 
     // --- Rendering Proxy ---
