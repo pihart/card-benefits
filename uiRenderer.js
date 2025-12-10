@@ -4,8 +4,6 @@
 class UIRenderer {
     constructor(app) {
         this.app = app; // Reference to the main controller
-        // Track which progress bars have been rendered to know when to animate
-        this.renderedProgressBars = new Set();
     }
 
     // ==================== TYPE CHECK HELPERS ====================
@@ -32,24 +30,6 @@ class UIRenderer {
         return benefit.isOneTime 
             ? benefit.isOneTime() 
             : benefit.frequency === 'one-time';
-    }
-
-    /**
-     * Helper to create a progress bar inner element with proper animation handling.
-     * Only animates on first render (initial load).
-     * @param {string} id - Unique identifier for this progress bar
-     * @param {number} widthPercent - Width percentage (0-100)
-     * @param {string} backgroundColor - CSS color value
-     * @returns {string} HTML string for the progress bar inner element
-     */
-    _createProgressBarInner(id, widthPercent, backgroundColor) {
-        const isFirstRender = !this.renderedProgressBars.has(id);
-        this.renderedProgressBars.add(id);
-        
-        const animationClass = isFirstRender ? ' initial-load' : '';
-        const width = Math.min(widthPercent, 100);
-        
-        return `<div class="progress-bar-inner${animationClass}" style="width: ${width}%; background-color: ${backgroundColor};"></div>`;
     }
 
     // ... (renderExpiringSoon unchanged) ...
@@ -396,7 +376,15 @@ class UIRenderer {
         const progressContainer = document.createElement('div');
         progressContainer.className = 'progress-bar';
         const barColor = isMet ? 'var(--success)' : 'var(--warning)';
-        progressContainer.innerHTML = this._createProgressBarInner(`minspend-${minSpend.id}`, progressPercent, barColor);
+        const progressBarInner = document.createElement('div');
+        progressBarInner.className = 'progress-bar-inner';
+        progressBarInner.style.backgroundColor = barColor;
+        // Start at 0 width, then animate to target width
+        progressBarInner.style.width = '0%';
+        progressContainer.appendChild(progressBarInner);
+        // Force reflow to ensure the transition triggers
+        progressBarInner.offsetWidth;
+        progressBarInner.style.width = `${Math.min(progressPercent, 100)}%`;
 
         // Deadline
         const deadlineDiv = document.createElement('div');
@@ -908,28 +896,43 @@ class UIRenderer {
         // Progress bar - show earn progress for earning carryover, usage progress otherwise
         const progressContainer = document.createElement('div');
         progressContainer.className = 'progress-bar';
+        
+        // Determine progress bar properties
+        let barWidth, barColor;
         if (isLockedByMinSpend) {
             // Show minimum spend progress
             const minSpendProgress = lockedByMinSpend.currentAmount || 0;
             const minSpendTarget = lockedByMinSpend.targetAmount || 1;
-            const minSpendPercent = (minSpendProgress / minSpendTarget) * 100;
-            progressContainer.innerHTML = this._createProgressBarInner(`benefit-locked-${benefit.id}`, minSpendPercent, 'var(--secondary-color)');
+            barWidth = Math.min((minSpendProgress / minSpendTarget) * 100, 100);
+            barColor = 'var(--secondary-color)';
         } else if (isCarryover && canEarnThisYear && !hasEarnedInstances && benefit.requiredMinimumSpendId) {
             // Show linked minimum spend progress for carryover benefits
             const linkedMinSpend = this.app.findMinimumSpend(benefit.requiredMinimumSpendId);
             if (linkedMinSpend) {
                 const minSpendProgress = linkedMinSpend.currentAmount || 0;
                 const minSpendTarget = linkedMinSpend.targetAmount || 1;
-                const minSpendPercent = (minSpendProgress / minSpendTarget) * 100;
-                progressContainer.innerHTML = this._createProgressBarInner(`benefit-earn-${benefit.id}`, minSpendPercent, 'var(--warning)');
+                barWidth = Math.min((minSpendProgress / minSpendTarget) * 100, 100);
+                barColor = 'var(--warning)';
             } else {
-                progressContainer.innerHTML = this._createProgressBarInner(`benefit-earn-${benefit.id}`, 0, 'var(--primary-color)');
+                barWidth = 0;
+                barColor = 'var(--primary-color)';
             }
         } else {
             // Normal usage progress bar
-            const barColor = isUsed ? 'var(--success)' : 'var(--primary-color)';
-            progressContainer.innerHTML = this._createProgressBarInner(`benefit-${benefit.id}`, progressPercent, barColor);
+            barWidth = progressPercent;
+            barColor = isUsed ? 'var(--success)' : 'var(--primary-color)';
         }
+        
+        // Create progress bar inner element
+        const progressBarInner = document.createElement('div');
+        progressBarInner.className = 'progress-bar-inner';
+        progressBarInner.style.backgroundColor = barColor;
+        // Start at 0 width, then animate to target width
+        progressBarInner.style.width = '0%';
+        progressContainer.appendChild(progressBarInner);
+        // Force reflow to ensure the transition triggers
+        progressBarInner.offsetWidth;
+        progressBarInner.style.width = `${barWidth}%`;
 
         // Reset/Expiry Date section
         const nextResetDiv = document.createElement('div');
