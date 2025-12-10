@@ -114,7 +114,7 @@
 .benefit-item .next-reset,
 .benefit-item .benefit-controls,
 .benefit-item .edit-form {
-    max-height: 500px;
+    max-height: 1500px;
     overflow: hidden;
     visibility: visible;
     opacity: 1;
@@ -357,7 +357,7 @@ input[type=number] {
 .min-spend-item .next-reset,
 .min-spend-item .benefit-controls,
 .min-spend-item .edit-form {
-    max-height: 500px;
+    max-height: 1500px;
     overflow: hidden;
     visibility: visible;
     opacity: 1;
@@ -447,7 +447,7 @@ input[type=number] {
 .benefit-item.benefit-in-section .next-reset,
 .benefit-item.benefit-in-section .benefit-controls,
 .benefit-item.benefit-in-section .edit-form {
-    max-height: 500px !important;
+    max-height: 1500px !important;
     opacity: 1 !important;
     visibility: visible !important;
 }
