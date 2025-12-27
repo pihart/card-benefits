@@ -1691,7 +1691,7 @@ class UIRenderer {
                 addBtn.textContent = '+ Add Justification';
                 addBtn.style.marginTop = '10px';
                 addBtn.onclick = () => {
-                    const form = this.createJustificationForm(benefit, true, index);
+                    const form = this.createJustificationForm(benefit, true, index, addBtn);
                     instanceSection.insertBefore(form, addBtn);
                     addBtn.style.display = 'none';
                 };
@@ -1711,7 +1711,7 @@ class UIRenderer {
             addBtn.textContent = '+ Add Justification';
             addBtn.style.marginTop = '10px';
             addBtn.onclick = () => {
-                const form = this.createJustificationForm(benefit, false, null);
+                const form = this.createJustificationForm(benefit, false, null, addBtn);
                 modalContent.insertBefore(form, addBtn);
                 addBtn.style.display = 'none';
             };
@@ -1893,9 +1893,10 @@ class UIRenderer {
      * @param {Benefit} benefit - The benefit
      * @param {boolean} isCarryover - Whether this is for a carryover instance
      * @param {number|null} instanceIndex - Instance index for carryover
+     * @param {HTMLElement} addBtn - Reference to the add button to re-show on cancel
      * @returns {HTMLElement}
      */
-    createJustificationForm(benefit, isCarryover, instanceIndex) {
+    createJustificationForm(benefit, isCarryover, instanceIndex, addBtn) {
         const form = document.createElement('form');
         form.style.padding = '15px';
         form.style.backgroundColor = '#f9f9f9';
@@ -1939,9 +1940,8 @@ class UIRenderer {
         
         form.querySelector('.cancel-btn').onclick = () => {
             form.remove();
-            // Re-show the add button
-            const addBtn = form.parentElement.querySelector('.secondary-btn');
-            if (addBtn && addBtn.textContent === '+ Add Justification') {
+            // Re-show the add button using the passed reference
+            if (addBtn) {
                 addBtn.style.display = 'block';
             }
         };
