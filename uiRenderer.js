@@ -1145,6 +1145,15 @@ class UIRenderer {
 
         const rightControls = document.createElement('div');
         rightControls.className = 'controls-right';
+        
+        const justifyBtn = document.createElement('button');
+        justifyBtn.className = 'secondary-btn';
+        justifyBtn.textContent = '📝 Justifications';
+        justifyBtn.onclick = (e) => {
+            e.stopPropagation();
+            this.showJustificationsModal(benefit, card, isCarryover ? activeInstances : null);
+        };
+        
         const editBtn = document.createElement('button');
         editBtn.className = 'secondary-btn';
         editBtn.textContent = 'Edit';
@@ -1154,6 +1163,7 @@ class UIRenderer {
         deleteBtn.textContent = 'Delete';
         deleteBtn.onclick = () => this.app.handleDeleteBenefit(benefit.id);
 
+        rightControls.appendChild(justifyBtn);
         rightControls.appendChild(editBtn);
         rightControls.appendChild(deleteBtn);
         controlsDiv.appendChild(rightControls);
@@ -1628,5 +1638,314 @@ class UIRenderer {
         document.getElementById(`cancel-${uId}`).onclick = () => {
             this.app.render();
         };
+    }
+
+    /**
+     * Shows a modal for managing usage justifications for a benefit.
+     * @param {Benefit} benefit - The benefit
+     * @param {Card} card - The parent card
+     * @param {Array|null} instances - For carryover benefits, the active instances
+     */
+    showJustificationsModal(benefit, card, instances = null) {
+        const isCarryover = this._isCarryoverBenefit(benefit);
+        
+        // Create modal overlay
+        const modalOverlay = document.createElement('div');
+        modalOverlay.className = 'modal-overlay';
+        modalOverlay.style.display = 'flex';
+        
+        // Create modal content
+        const modalContent = document.createElement('div');
+        modalContent.className = 'modal-content';
+        modalContent.style.maxWidth = '600px';
+        modalContent.style.maxHeight = '80vh';
+        modalContent.style.overflow = 'auto';
+        
+        const title = document.createElement('h2');
+        title.textContent = `Justifications: ${benefit.description}`;
+        modalContent.appendChild(title);
+        
+        // For carryover benefits, show tabs for each instance
+        if (isCarryover && instances && instances.length > 0) {
+            instances.forEach((instance, index) => {
+                const earnYear = CarryoverCycle.getEarnYear(instance.earnedDate);
+                const instanceSection = document.createElement('div');
+                instanceSection.style.marginBottom = '20px';
+                instanceSection.style.borderBottom = '1px solid #ddd';
+                instanceSection.style.paddingBottom = '15px';
+                
+                const instanceTitle = document.createElement('h3');
+                instanceTitle.textContent = `${earnYear} Credit`;
+                instanceTitle.style.fontSize = '1.1rem';
+                instanceTitle.style.marginBottom = '10px';
+                instanceSection.appendChild(instanceTitle);
+                
+                // Show existing justifications
+                const justifications = instance.usageJustifications || [];
+                const justList = this.createJustificationsList(benefit, justifications, true, index);
+                instanceSection.appendChild(justList);
+                
+                // Add justification button
+                const addBtn = document.createElement('button');
+                addBtn.className = 'secondary-btn';
+                addBtn.textContent = '+ Add Justification';
+                addBtn.style.marginTop = '10px';
+                addBtn.onclick = () => {
+                    const form = this.createJustificationForm(benefit, true, index);
+                    instanceSection.insertBefore(form, addBtn);
+                    addBtn.style.display = 'none';
+                };
+                instanceSection.appendChild(addBtn);
+                
+                modalContent.appendChild(instanceSection);
+            });
+        } else {
+            // Regular benefit justifications
+            const justifications = benefit.usageJustifications || [];
+            const justList = this.createJustificationsList(benefit, justifications, false, null);
+            modalContent.appendChild(justList);
+            
+            // Add justification button
+            const addBtn = document.createElement('button');
+            addBtn.className = 'secondary-btn';
+            addBtn.textContent = '+ Add Justification';
+            addBtn.style.marginTop = '10px';
+            addBtn.onclick = () => {
+                const form = this.createJustificationForm(benefit, false, null);
+                modalContent.insertBefore(form, addBtn);
+                addBtn.style.display = 'none';
+            };
+            modalContent.appendChild(addBtn);
+        }
+        
+        // Summary info
+        const summary = document.createElement('div');
+        summary.style.marginTop = '20px';
+        summary.style.padding = '10px';
+        summary.style.backgroundColor = '#f5f5f5';
+        summary.style.borderRadius = '5px';
+        
+        let totalJustified = 0;
+        let totalUsed = 0;
+        
+        if (isCarryover && instances) {
+            instances.forEach(inst => {
+                totalUsed += inst.usedAmount || 0;
+                if (inst.usageJustifications) {
+                    totalJustified += inst.usageJustifications.reduce((sum, j) => sum + (j.amount || 0), 0);
+                }
+            });
+        } else {
+            totalUsed = benefit.usedAmount || 0;
+            if (benefit.usageJustifications) {
+                totalJustified = benefit.usageJustifications.reduce((sum, j) => sum + (j.amount || 0), 0);
+            }
+        }
+        
+        summary.innerHTML = `
+            <strong>Summary:</strong><br>
+            Total Used: $${totalUsed.toFixed(2)}<br>
+            Total Justified: $${totalJustified.toFixed(2)}<br>
+            Unjustified: $${(totalUsed - totalJustified).toFixed(2)}
+        `;
+        modalContent.appendChild(summary);
+        
+        // Close button
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = 'Close';
+        closeBtn.style.marginTop = '15px';
+        closeBtn.onclick = () => {
+            document.body.removeChild(modalOverlay);
+        };
+        modalContent.appendChild(closeBtn);
+        
+        modalOverlay.appendChild(modalContent);
+        document.body.appendChild(modalOverlay);
+        
+        // Close on overlay click
+        modalOverlay.onclick = (e) => {
+            if (e.target === modalOverlay) {
+                document.body.removeChild(modalOverlay);
+            }
+        };
+    }
+
+    /**
+     * Creates a list of justifications.
+     * @param {Benefit} benefit - The benefit
+     * @param {Array} justifications - Array of justification objects
+     * @param {boolean} isCarryover - Whether this is for a carryover instance
+     * @param {number|null} instanceIndex - Instance index for carryover
+     * @returns {HTMLElement}
+     */
+    createJustificationsList(benefit, justifications, isCarryover, instanceIndex) {
+        const container = document.createElement('div');
+        
+        if (justifications.length === 0) {
+            const emptyMsg = document.createElement('p');
+            emptyMsg.textContent = 'No justifications added yet.';
+            emptyMsg.style.color = '#999';
+            emptyMsg.style.fontStyle = 'italic';
+            container.appendChild(emptyMsg);
+            return container;
+        }
+        
+        const list = document.createElement('ul');
+        list.style.listStyle = 'none';
+        list.style.padding = '0';
+        
+        justifications.forEach(just => {
+            const li = document.createElement('li');
+            li.style.padding = '10px';
+            li.style.marginBottom = '8px';
+            li.style.border = '1px solid #ddd';
+            li.style.borderRadius = '5px';
+            li.style.backgroundColor = just.confirmed ? '#e8f5e9' : '#fff';
+            
+            const header = document.createElement('div');
+            header.style.display = 'flex';
+            header.style.justifyContent = 'space-between';
+            header.style.alignItems = 'center';
+            header.style.marginBottom = '5px';
+            
+            const amountSpan = document.createElement('span');
+            amountSpan.style.fontWeight = 'bold';
+            amountSpan.textContent = `$${(just.amount || 0).toFixed(2)}`;
+            header.appendChild(amountSpan);
+            
+            const badges = document.createElement('div');
+            badges.style.display = 'flex';
+            badges.style.gap = '5px';
+            
+            if (just.confirmed) {
+                const confirmedBadge = document.createElement('span');
+                confirmedBadge.textContent = '✅ Confirmed';
+                confirmedBadge.style.fontSize = '0.8rem';
+                confirmedBadge.style.color = '#4caf50';
+                badges.appendChild(confirmedBadge);
+            }
+            
+            if (just.reminderDate) {
+                const reminderBadge = document.createElement('span');
+                const reminderDate = new Date(just.reminderDate);
+                const isPast = reminderDate <= this.app.today && !just.confirmed;
+                reminderBadge.textContent = `🔔 ${reminderDate.toLocaleDateString()}`;
+                reminderBadge.style.fontSize = '0.8rem';
+                reminderBadge.style.color = isPast ? '#ff9800' : '#666';
+                if (isPast) reminderBadge.style.fontWeight = 'bold';
+                badges.appendChild(reminderBadge);
+            }
+            
+            header.appendChild(badges);
+            li.appendChild(header);
+            
+            const textDiv = document.createElement('div');
+            textDiv.textContent = just.justification || '(No description)';
+            textDiv.style.marginBottom = '8px';
+            li.appendChild(textDiv);
+            
+            const actions = document.createElement('div');
+            actions.style.display = 'flex';
+            actions.style.gap = '5px';
+            
+            if (!just.confirmed) {
+                const confirmBtn = document.createElement('button');
+                confirmBtn.className = 'secondary-btn';
+                confirmBtn.textContent = 'Confirm';
+                confirmBtn.style.fontSize = '0.85rem';
+                confirmBtn.style.padding = '3px 8px';
+                confirmBtn.onclick = () => {
+                    if (isCarryover) {
+                        this.app.handleConfirmCarryoverJustification(benefit.id, instanceIndex, just.id);
+                    } else {
+                        this.app.handleConfirmJustification(benefit.id, just.id);
+                    }
+                };
+                actions.appendChild(confirmBtn);
+            }
+            
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'danger-btn';
+            deleteBtn.textContent = 'Delete';
+            deleteBtn.style.fontSize = '0.85rem';
+            deleteBtn.style.padding = '3px 8px';
+            deleteBtn.onclick = () => {
+                if (confirm('Delete this justification?')) {
+                    if (isCarryover) {
+                        this.app.handleRemoveCarryoverJustification(benefit.id, instanceIndex, just.id);
+                    } else {
+                        this.app.handleRemoveJustification(benefit.id, just.id);
+                    }
+                }
+            };
+            actions.appendChild(deleteBtn);
+            
+            li.appendChild(actions);
+            list.appendChild(li);
+        });
+        
+        container.appendChild(list);
+        return container;
+    }
+
+    /**
+     * Creates a form for adding a new justification.
+     * @param {Benefit} benefit - The benefit
+     * @param {boolean} isCarryover - Whether this is for a carryover instance
+     * @param {number|null} instanceIndex - Instance index for carryover
+     * @returns {HTMLElement}
+     */
+    createJustificationForm(benefit, isCarryover, instanceIndex) {
+        const form = document.createElement('form');
+        form.style.padding = '15px';
+        form.style.backgroundColor = '#f9f9f9';
+        form.style.borderRadius = '5px';
+        form.style.marginBottom = '15px';
+        
+        form.innerHTML = `
+            <h4 style="margin-top: 0;">Add Justification</h4>
+            <div style="margin-bottom: 10px;">
+                <label style="display: block; margin-bottom: 5px;">Amount</label>
+                <input type="number" name="amount" placeholder="0.00" min="0.01" step="0.01" required style="width: 100%; padding: 8px;">
+            </div>
+            <div style="margin-bottom: 10px;">
+                <label style="display: block; margin-bottom: 5px;">Description</label>
+                <textarea name="justification" placeholder="E.g., Trip to Spain" required style="width: 100%; padding: 8px; min-height: 60px;"></textarea>
+            </div>
+            <div style="margin-bottom: 10px;">
+                <label style="display: block; margin-bottom: 5px;">Reminder Date (optional)</label>
+                <input type="date" name="reminderDate" style="width: 100%; padding: 8px;">
+                <small style="color: #666;">Set a reminder to confirm this charge posted</small>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button type="submit">Add</button>
+                <button type="button" class="secondary-btn cancel-btn">Cancel</button>
+            </div>
+        `;
+        
+        form.onsubmit = (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const amount = parseFloat(formData.get('amount'));
+            const justification = formData.get('justification');
+            const reminderDate = formData.get('reminderDate') || null;
+            
+            if (isCarryover) {
+                this.app.handleAddCarryoverJustification(benefit.id, instanceIndex, amount, justification, reminderDate);
+            } else {
+                this.app.handleAddJustification(benefit.id, amount, justification, reminderDate);
+            }
+        };
+        
+        form.querySelector('.cancel-btn').onclick = () => {
+            form.remove();
+            // Re-show the add button
+            const addBtn = form.parentElement.querySelector('.secondary-btn');
+            if (addBtn && addBtn.textContent === '+ Add Justification') {
+                addBtn.style.display = 'block';
+            }
+        };
+        
+        return form;
     }
 }

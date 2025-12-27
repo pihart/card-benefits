@@ -1408,6 +1408,199 @@ class BenefitTrackerApp {
         localStorage.setItem('creditCardBenefitTracker_hideMonthlyExpiring', this.hideMonthlyExpiring);
         this.render();
     }
+
+    // ==================== USAGE JUSTIFICATION HANDLERS ====================
+
+    /**
+     * Adds a usage justification to a benefit.
+     * @param {string} benefitId - The benefit ID
+     * @param {number} amount - The amount justified
+     * @param {string} justification - The justification text
+     * @param {string|null} reminderDate - Optional reminder date
+     */
+    handleAddJustification(benefitId, amount, justification, reminderDate = null) {
+        for (const c of this.cards) {
+            const b = c.findBenefit ? c.findBenefit(benefitId) : c.benefits.find(ben => ben.id === benefitId);
+            if (b) {
+                if (b.addUsageJustification) {
+                    b.addUsageJustification(amount, justification, reminderDate);
+                } else {
+                    // Fallback for plain objects
+                    if (!b.usageJustifications) b.usageJustifications = [];
+                    b.usageJustifications.push({
+                        id: `just-${Math.random().toString(36).substr(2, 9)}`,
+                        amount: amount,
+                        justification: justification,
+                        reminderDate: reminderDate,
+                        confirmed: false
+                    });
+                }
+                this.saveState();
+                this.render();
+                return;
+            }
+        }
+    }
+
+    /**
+     * Removes a usage justification from a benefit.
+     * @param {string} benefitId - The benefit ID
+     * @param {string} justificationId - The justification ID
+     */
+    handleRemoveJustification(benefitId, justificationId) {
+        for (const c of this.cards) {
+            const b = c.findBenefit ? c.findBenefit(benefitId) : c.benefits.find(ben => ben.id === benefitId);
+            if (b) {
+                if (b.removeUsageJustification) {
+                    b.removeUsageJustification(justificationId);
+                } else {
+                    // Fallback for plain objects
+                    if (b.usageJustifications) {
+                        const idx = b.usageJustifications.findIndex(j => j.id === justificationId);
+                        if (idx > -1) b.usageJustifications.splice(idx, 1);
+                    }
+                }
+                this.saveState();
+                this.render();
+                return;
+            }
+        }
+    }
+
+    /**
+     * Updates a usage justification.
+     * @param {string} benefitId - The benefit ID
+     * @param {string} justificationId - The justification ID
+     * @param {Object} updates - Fields to update
+     */
+    handleUpdateJustification(benefitId, justificationId, updates) {
+        for (const c of this.cards) {
+            const b = c.findBenefit ? c.findBenefit(benefitId) : c.benefits.find(ben => ben.id === benefitId);
+            if (b) {
+                if (b.updateUsageJustification) {
+                    b.updateUsageJustification(justificationId, updates);
+                } else {
+                    // Fallback for plain objects
+                    if (b.usageJustifications) {
+                        const j = b.usageJustifications.find(just => just.id === justificationId);
+                        if (j) Object.assign(j, updates);
+                    }
+                }
+                this.saveState();
+                this.render();
+                return;
+            }
+        }
+    }
+
+    /**
+     * Confirms a justification (marks it as confirmed).
+     * @param {string} benefitId - The benefit ID
+     * @param {string} justificationId - The justification ID
+     */
+    handleConfirmJustification(benefitId, justificationId) {
+        this.handleUpdateJustification(benefitId, justificationId, { confirmed: true });
+    }
+
+    /**
+     * Adds a usage justification to a carryover instance.
+     * @param {string} benefitId - The benefit ID
+     * @param {number} instanceIndex - The carryover instance index
+     * @param {number} amount - The amount justified
+     * @param {string} justification - The justification text
+     * @param {string|null} reminderDate - Optional reminder date
+     */
+    handleAddCarryoverJustification(benefitId, instanceIndex, amount, justification, reminderDate = null) {
+        for (const c of this.cards) {
+            const b = c.findBenefit ? c.findBenefit(benefitId) : c.benefits.find(ben => ben.id === benefitId);
+            if (b && this._isCarryoverBenefit(b)) {
+                if (b.addCarryoverInstanceJustification) {
+                    b.addCarryoverInstanceJustification(instanceIndex, amount, justification, reminderDate);
+                } else {
+                    // Fallback for plain objects
+                    const instance = b.earnedInstances[instanceIndex];
+                    if (instance) {
+                        if (!instance.usageJustifications) instance.usageJustifications = [];
+                        instance.usageJustifications.push({
+                            id: `just-${Math.random().toString(36).substr(2, 9)}`,
+                            amount: amount,
+                            justification: justification,
+                            reminderDate: reminderDate,
+                            confirmed: false
+                        });
+                    }
+                }
+                this.saveState();
+                this.render();
+                return;
+            }
+        }
+    }
+
+    /**
+     * Removes a usage justification from a carryover instance.
+     * @param {string} benefitId - The benefit ID
+     * @param {number} instanceIndex - The carryover instance index
+     * @param {string} justificationId - The justification ID
+     */
+    handleRemoveCarryoverJustification(benefitId, instanceIndex, justificationId) {
+        for (const c of this.cards) {
+            const b = c.findBenefit ? c.findBenefit(benefitId) : c.benefits.find(ben => ben.id === benefitId);
+            if (b && this._isCarryoverBenefit(b)) {
+                if (b.removeCarryoverInstanceJustification) {
+                    b.removeCarryoverInstanceJustification(instanceIndex, justificationId);
+                } else {
+                    // Fallback for plain objects
+                    const instance = b.earnedInstances[instanceIndex];
+                    if (instance && instance.usageJustifications) {
+                        const idx = instance.usageJustifications.findIndex(j => j.id === justificationId);
+                        if (idx > -1) instance.usageJustifications.splice(idx, 1);
+                    }
+                }
+                this.saveState();
+                this.render();
+                return;
+            }
+        }
+    }
+
+    /**
+     * Updates a usage justification in a carryover instance.
+     * @param {string} benefitId - The benefit ID
+     * @param {number} instanceIndex - The carryover instance index
+     * @param {string} justificationId - The justification ID
+     * @param {Object} updates - Fields to update
+     */
+    handleUpdateCarryoverJustification(benefitId, instanceIndex, justificationId, updates) {
+        for (const c of this.cards) {
+            const b = c.findBenefit ? c.findBenefit(benefitId) : c.benefits.find(ben => ben.id === benefitId);
+            if (b && this._isCarryoverBenefit(b)) {
+                if (b.updateCarryoverInstanceJustification) {
+                    b.updateCarryoverInstanceJustification(instanceIndex, justificationId, updates);
+                } else {
+                    // Fallback for plain objects
+                    const instance = b.earnedInstances[instanceIndex];
+                    if (instance && instance.usageJustifications) {
+                        const j = instance.usageJustifications.find(just => just.id === justificationId);
+                        if (j) Object.assign(j, updates);
+                    }
+                }
+                this.saveState();
+                this.render();
+                return;
+            }
+        }
+    }
+
+    /**
+     * Confirms a carryover justification (marks it as confirmed).
+     * @param {string} benefitId - The benefit ID
+     * @param {number} instanceIndex - The carryover instance index
+     * @param {string} justificationId - The justification ID
+     */
+    handleConfirmCarryoverJustification(benefitId, instanceIndex, justificationId) {
+        this.handleUpdateCarryoverJustification(benefitId, instanceIndex, justificationId, { confirmed: true });
+    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
