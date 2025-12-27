@@ -813,6 +813,7 @@ runner.suite('Default Expiring Threshold', ({ test }) => {
                     'card-list-container': { innerHTML: '', querySelectorAll: () => [] },
                     'expiring-days-select': { value: '30', addEventListener: () => {} },
                     'collapse-sections-checkbox': { checked: false, addEventListener: () => {} },
+                    'hide-monthly-expiring-checkbox': { checked: false, addEventListener: () => {} },
                     'add-card-form': { addEventListener: () => {} },
                     'show-add-card-btn': { style: {}, addEventListener: () => {} },
                     'new-card-name': {},
@@ -900,6 +901,38 @@ runner.suite('Default Expiring Threshold', ({ test }) => {
         // But it should be counted in the 60-day threshold
         const count60 = app.calculateActiveEntriesForThreshold(60);
         assertEquals(count60, 1, 'Should have 1 active entry within 60 days');
+    });
+    
+    test('calculateActiveEntriesForThreshold hides monthly benefits when setting enabled', () => {
+        setupMockDOM();
+        
+        const app = new BenefitTrackerApp();
+        app.today = new Date('2024-12-10');
+        app.hideMonthlyExpiring = true;
+        
+        const card = new Card({
+            id: 'test-card',
+            name: 'Test Card',
+            anniversaryDate: '2024-01-01',
+            benefits: []
+        });
+        
+        // Monthly benefit that would otherwise fall within the window
+        const benefit = new Benefit({
+            id: 'monthly-benefit',
+            description: 'Monthly calendar credit',
+            totalAmount: 100,
+            usedAmount: 20,
+            frequency: 'monthly',
+            resetType: 'calendar',
+            lastReset: '2024-12-01'
+        });
+        
+        card.benefits.push(benefit);
+        app.cards = [card];
+        
+        const count60 = app.calculateActiveEntriesForThreshold(60);
+        assertEquals(count60, 0, 'Monthly benefit should be hidden from expiring count when setting is enabled');
     });
 
     test('calculateActiveEntriesForThreshold ignores fully used benefits', () => {
