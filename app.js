@@ -14,6 +14,7 @@ class BenefitTrackerApp {
         this.expiringDays = 30;
         this.pollInterval = 800;
         this.collapseSections = false; // Setting to group fully utilized/ignored items into sections
+        this.hideMonthlyExpiring = false; // Setting to hide monthly benefits from Expiring Soon
         this.userSelectedThreshold = false; // Track if user manually selected a threshold
 
         // Concurrency Control
@@ -45,6 +46,7 @@ class BenefitTrackerApp {
         
         // Display Options References
         this.collapseSectionsCheckbox = document.getElementById('collapse-sections-checkbox');
+        this.hideMonthlyExpiringCheckbox = document.getElementById('hide-monthly-expiring-checkbox');
 
         this.initListeners();
     }
@@ -75,6 +77,8 @@ class BenefitTrackerApp {
             this.customDateInput.value = storedCustomDate || '';
             // Populate collapse sections checkbox
             this.collapseSectionsCheckbox.checked = this.collapseSections;
+            // Populate hide monthly expiring checkbox
+            this.hideMonthlyExpiringCheckbox.checked = this.hideMonthlyExpiring;
             document.getElementById('settings-modal').style.display = 'flex';
         };
         document.getElementById('settings-cancel').onclick = () => document.getElementById('settings-modal').style.display = 'none';
@@ -87,6 +91,9 @@ class BenefitTrackerApp {
         
         // Collapse Sections Listener
         this.collapseSectionsCheckbox.addEventListener('change', this.handleCollapseSectionsChange.bind(this));
+        
+        // Hide monthly in expiring widget listener
+        this.hideMonthlyExpiringCheckbox.addEventListener('change', this.handleHideMonthlyExpiringChange.bind(this));
     }
 
     // ... (init and initLiveSync unchanged) ...
@@ -102,6 +109,10 @@ class BenefitTrackerApp {
         // Load collapse sections setting
         const storedCollapseSections = localStorage.getItem('creditCardBenefitTracker_collapseSections');
         this.collapseSections = storedCollapseSections === 'true';
+        
+        // Load hide monthly expiring setting
+        const storedHideMonthlyExpiring = localStorage.getItem('creditCardBenefitTracker_hideMonthlyExpiring');
+        this.hideMonthlyExpiring = storedHideMonthlyExpiring === 'true';
 
         const cloudConfig = localStorage.getItem('creditCardBenefitTracker_config');
         if (cloudConfig) {
@@ -225,6 +236,16 @@ class BenefitTrackerApp {
         return benefit.isOneTime 
             ? benefit.isOneTime() 
             : benefit.frequency === 'one-time';
+    }
+    
+    /**
+     * Helper to check if a benefit is a monthly recurring benefit.
+     * Excludes carryover and one-time benefits.
+     * @param {Benefit|Object} benefit
+     * @returns {boolean}
+     */
+    _isMonthlyRecurring(benefit) {
+        return !this._isCarryoverBenefit(benefit) && !this._isOneTimeBenefit(benefit) && benefit.frequency === 'monthly';
     }
 
     /**
@@ -543,6 +564,8 @@ class BenefitTrackerApp {
             }
 
             card.benefits.forEach(benefit => {
+                if (this.hideMonthlyExpiring && this._isMonthlyRecurring(benefit)) return;
+
                 // Handle carryover benefits separately
                 if (this._isCarryoverBenefit(benefit)) {
                     const activeInstances = this.getActiveCarryoverInstances(benefit);
@@ -710,6 +733,8 @@ class BenefitTrackerApp {
             }
 
             card.benefits.forEach(benefit => {
+                if (this.hideMonthlyExpiring && this._isMonthlyRecurring(benefit)) return;
+
                 // Handle carryover benefits separately - each earned instance can expire
                 if (this._isCarryoverBenefit(benefit)) {
                     const activeInstances = this.getActiveCarryoverInstances(benefit);
@@ -739,6 +764,8 @@ class BenefitTrackerApp {
                     });
                     return; // Don't process as regular benefit
                 }
+
+                if (this.hideMonthlyExpiring && this._isMonthlyRecurring(benefit)) return;
 
                 const rem = benefit.totalAmount - benefit.usedAmount;
                 if (this._isOneTimeBenefit(benefit)) return;
@@ -1373,6 +1400,12 @@ class BenefitTrackerApp {
     handleCollapseSectionsChange(e) {
         this.collapseSections = e.target.checked;
         localStorage.setItem('creditCardBenefitTracker_collapseSections', this.collapseSections);
+        this.render();
+    }
+    
+    handleHideMonthlyExpiringChange(e) {
+        this.hideMonthlyExpiring = e.target.checked;
+        localStorage.setItem('creditCardBenefitTracker_hideMonthlyExpiring', this.hideMonthlyExpiring);
         this.render();
     }
 }
