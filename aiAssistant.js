@@ -92,10 +92,13 @@ class AIAssistant {
     }
 
     baseSystemPrompt() {
+        const schemaText = globalThis.DATA_SCHEMA
+            ? JSON.stringify(globalThis.DATA_SCHEMA)
+            : 'No JSON schema available; respond with concise text only.';
         return [
             'You are an assistant for a credit card benefit tracker.',
             'Respect this JSON schema when proposing data updates:',
-            JSON.stringify(globalThis.DATA_SCHEMA || {}),
+            schemaText,
             'Use concise answers and include card/benefit names as references.'
         ].join('\n');
     }
@@ -247,12 +250,12 @@ class AIAssistant {
                     until.setMonth(until.getMonth() + 1);
                     until.setHours(0, 0, 0, 0);
                     benefit.ignoredEndDate = until.toISOString();
-                    matches.push({ card: card.name, benefit: benefit.description, action: 'ignored until next month' });
+                    matches.push({ cardId: card.id, card: card.name, benefit: benefit.description, action: 'ignored until next month' });
                 }
 
                 if (lowered.includes('mark') || lowered.includes('use') || lowered.includes('set')) {
                     benefit.usedAmount = benefit.totalAmount;
-                    matches.push({ card: card.name, benefit: benefit.description, action: 'marked as fully used' });
+                    matches.push({ cardId: card.id, card: card.name, benefit: benefit.description, action: 'marked as fully used' });
                 }
             });
         });
@@ -267,7 +270,11 @@ class AIAssistant {
             return 'I could not find a matching benefit to modify. Please mention the card or benefit name.';
         }
 
-        const validation = validateDataAgainstSchema(this.app.cards.map((c) => c.toJSON()));
+        const modifiedCardIds = new Set(matches.map((m) => m.cardId));
+        const cardsToValidate = this.app.cards.filter((c) => modifiedCardIds.has(c.id));
+        const validationTarget = cardsToValidate.length ? cardsToValidate : this.app.cards;
+
+        const validation = validateDataAgainstSchema(validationTarget.map((c) => c.toJSON()));
         if (!validation.valid) {
             this.app.cards = before;
             this.app.render();
