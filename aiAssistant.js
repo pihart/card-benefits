@@ -243,7 +243,7 @@ class AIAssistant {
         const matches = [];
         const hasWord = (word) => new RegExp(`\\b${word}\\b`, 'i').test(lowered);
 
-        const shouldMatch = (text) => keywords.some((word) => text.includes(word));
+        const shouldMatch = (text) => keywords.some((word) => new RegExp(`\\b${word}\\b`, 'i').test(text));
 
         this.app.cards.forEach((card) => {
             card.benefits.forEach((benefit) => {
@@ -276,12 +276,18 @@ class AIAssistant {
 
         const modifiedCardIds = new Set(matches.map((m) => m.cardId));
         const cardsToValidate = this.app.cards.filter((c) => modifiedCardIds.has(c.id));
-        const validationTarget = cardsToValidate.length ? cardsToValidate : this.app.cards;
+        if (cardsToValidate.length === 0) {
+            this.cards.length = 0;
+            before.forEach((c) => this.cards.push(c));
+            this.render();
+            return 'No matching cards found to update.';
+        }
 
-        const validation = validateDataAgainstSchema(validationTarget.map((c) => c.toJSON()));
+        const validation = validateDataAgainstSchema(cardsToValidate.map((c) => c.toJSON()));
         if (!validation.valid) {
-            this.app.cards = before;
-            this.app.render();
+            this.cards.length = 0;
+            before.forEach((c) => this.cards.push(c));
+            this.render();
             return `Schema validation failed: ${validation.errors.join('; ')}`;
         }
 

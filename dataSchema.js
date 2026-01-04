@@ -91,9 +91,9 @@
 
     function validateAgainstSchema(schema, value, path, errors) {
         const currentPath = path || 'root';
-        if (value === null) {
-            if (schema.nullable) return;
-            errors.push(`${currentPath} should not be null`);
+        if (value === null || value === undefined) {
+            if (value === null && schema.nullable) return;
+            errors.push(`${currentPath} is required`);
             return;
         }
 
