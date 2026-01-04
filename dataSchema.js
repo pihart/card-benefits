@@ -76,7 +76,6 @@
             },
             minimumSpends: {
                 type: 'array',
-                nullable: true,
                 items: MinimumSpendSchema
             }
         }
@@ -116,8 +115,12 @@
             }
             if (schema.required) {
                 schema.required.forEach((req) => {
-                    if (value[req] === undefined || value[req] === null) {
+                    const propSchema = schema.properties ? schema.properties[req] : null;
+                    const isNullable = propSchema && propSchema.nullable;
+                    if (value[req] === undefined) {
                         errors.push(`${currentPath}.${req} is required`);
+                    } else if (value[req] === null && !isNullable) {
+                        errors.push(`${currentPath}.${req} is required and cannot be null`);
                     }
                 });
             }
