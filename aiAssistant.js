@@ -18,7 +18,6 @@ class AIAssistant {
         this.settingsStatusEl = document.getElementById('ai-settings-status');
         this.progressShellEl = document.getElementById('ai-download-progress');
         this.progressBarEl = document.getElementById('ai-download-bar');
-        this.downloadNoteEl = document.getElementById('ai-download-note');
         this.refreshSummaryBtn = document.getElementById('ai-refresh-summary');
 
         this.attachListeners();
@@ -169,6 +168,14 @@ class AIAssistant {
         }));
     }
 
+    getNextMonthStartDate() {
+        const date = new Date(this.app.today);
+        date.setHours(0, 0, 0, 0);
+        date.setDate(1);
+        date.setMonth(date.getMonth() + 1);
+        return date;
+    }
+
     buildFallbackSummary() {
         const snapshot = this.buildContextSnapshot();
         if (snapshot.length === 0) return 'No cards or benefits to summarize yet.';
@@ -245,10 +252,7 @@ class AIAssistant {
 
                 if (hasWord('ignore')) {
                     benefit.ignored = true;
-                    const until = new Date(this.app.today);
-                    until.setHours(0, 0, 0, 0);
-                    until.setDate(1);
-                    until.setMonth(until.getMonth() + 1);
+                    const until = this.getNextMonthStartDate();
                     benefit.ignoredEndDate = until.toISOString();
                     matches.push({ cardId: card.id, card: card.name, benefit: benefit.description, action: 'ignored until next month' });
                 }
