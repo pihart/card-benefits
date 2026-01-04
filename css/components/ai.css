@@ -111,3 +111,13 @@
     background: var(--primary-color);
     transition: width 0.3s ease;
 }
+
+.ai-download-progress.indeterminate div {
+    width: 30%;
+    animation: ai-shimmer 1s linear infinite;
+}
+
+@keyframes ai-shimmer {
+    0% { margin-left: 0; }
+    100% { margin-left: 70%; }
+}

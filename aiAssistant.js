@@ -1,6 +1,7 @@
 class AIAssistant {
-    constructor(app) {
+    constructor(app, schema = globalThis.DATA_SCHEMA) {
         this.app = app;
+        this.schema = schema;
         this.session = null;
         this.modelReady = false;
         this.downloadTimer = null;
@@ -92,8 +93,8 @@ class AIAssistant {
     }
 
     baseSystemPrompt() {
-        const schemaText = globalThis.DATA_SCHEMA
-            ? JSON.stringify(globalThis.DATA_SCHEMA)
+        const schemaText = this.schema
+            ? JSON.stringify(this.schema)
             : 'No JSON schema available; respond with concise text only.';
         return [
             'You are an assistant for a credit card benefit tracker.',
@@ -105,12 +106,7 @@ class AIAssistant {
 
     async startDownload() {
         if (!this.availabilitySupported()) return;
-        let progress = 5;
-        this.setProgress(progress);
-        this.downloadTimer = setInterval(() => {
-            progress = Math.min(95, progress + 5);
-            this.setProgress(progress);
-        }, 600);
+        if (this.progressShellEl) this.progressShellEl.classList.add('indeterminate');
         try {
             this.session = await window.ai.languageModel.create({
                 systemPrompt: this.baseSystemPrompt()
@@ -118,6 +114,7 @@ class AIAssistant {
             this.modelReady = true;
             this.enableChat();
             this.setProgress(100);
+            if (this.progressShellEl) this.progressShellEl.classList.remove('indeterminate');
             this.setStatus('Model ready');
             this.refreshSummary();
         } catch (err) {
@@ -153,7 +150,8 @@ class AIAssistant {
     detectIntent(text) {
         const lowered = text.toLowerCase();
         const modifiers = ['mark', 'set', 'update', 'change', 'ignore', 'reset', 'remove', 'add'];
-        return modifiers.some((word) => lowered.includes(word)) ? 'modification' : 'question';
+        const pattern = new RegExp(`\\b(${modifiers.join('|')})\\b`, 'i');
+        return pattern.test(lowered) ? 'modification' : 'question';
     }
 
     buildContextSnapshot() {
@@ -236,6 +234,7 @@ class AIAssistant {
         const lowered = userText.toLowerCase();
         const keywords = lowered.split(/[^a-z0-9]+/).filter((k) => k && k.length > 3);
         const matches = [];
+        const hasWord = (word) => new RegExp(`\\b${word}\\b`, 'i').test(lowered);
 
         const shouldMatch = (text) => keywords.some((word) => text.includes(word));
 
@@ -244,7 +243,7 @@ class AIAssistant {
                 const desc = (benefit.description || '').toLowerCase();
                 if (!shouldMatch(desc)) return;
 
-                if (lowered.includes('ignore')) {
+                if (hasWord('ignore')) {
                     benefit.ignored = true;
                     const until = new Date(this.app.today);
                     until.setMonth(until.getMonth() + 1);
@@ -253,7 +252,7 @@ class AIAssistant {
                     matches.push({ cardId: card.id, card: card.name, benefit: benefit.description, action: 'ignored until next month' });
                 }
 
-                if (lowered.includes('mark') || lowered.includes('use') || lowered.includes('set')) {
+                else if (hasWord('mark') || hasWord('use') || hasWord('set')) {
                     benefit.usedAmount = benefit.totalAmount;
                     matches.push({ cardId: card.id, card: card.name, benefit: benefit.description, action: 'marked as fully used' });
                 }

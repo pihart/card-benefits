@@ -146,7 +146,7 @@ class BenefitTrackerApp {
         this.initLiveSync();
 
         if (typeof AIAssistant !== 'undefined' && document.getElementById('ai-assistant')) {
-            this.aiAssistant = new AIAssistant(this);
+            this.aiAssistant = new AIAssistant(this, globalThis.DATA_SCHEMA);
         }
 
         // Check for resets
