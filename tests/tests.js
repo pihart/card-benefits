@@ -42,6 +42,7 @@ loadModule(path.join(__dirname, '../models/MinimumSpend.js'));
 loadModule(path.join(__dirname, '../models/Benefit.js'));
 loadModule(path.join(__dirname, '../models/Card.js'));
 loadModule(path.join(__dirname, '../dateUtils.js'));
+loadModule(path.join(__dirname, '../dataSchema.js'));
 
 // ANSI color codes for terminal output (ESC[<code>m format)
 // Using built-in codes to avoid external dependencies
@@ -148,6 +149,55 @@ const runner = new TestRunner();
 // ============================================================
 // TEST SUITES
 // ============================================================
+
+runner.suite('Data Schema', ({ test }) => {
+    test('valid card data passes schema validation', () => {
+        const card = new Card({
+            id: 'card-schema-test',
+            name: 'Schema Card',
+            anniversaryDate: '2024-01-01',
+            benefits: [
+                {
+                    id: 'benefit-schema',
+                    description: 'Airline credit',
+                    totalAmount: 200,
+                    usedAmount: 50,
+                    frequency: 'annual',
+                    resetType: 'calendar',
+                    lastReset: '2024-01-01'
+                }
+            ],
+            minimumSpends: [
+                {
+                    id: 'min-schema',
+                    description: 'Spend $500',
+                    targetAmount: 500,
+                    currentAmount: 100,
+                    frequency: 'one-time',
+                    deadline: '2024-06-01'
+                }
+            ]
+        });
+
+        const result = validateDataAgainstSchema([card.toJSON()]);
+        assertTrue(result.valid, `Expected schema validation to pass. Errors: ${result.errors.join(', ')}`);
+    });
+
+    test('missing required fields fail schema validation', () => {
+        const invalid = [
+            {
+                name: 'Bad Card',
+                benefits: []
+            }
+        ];
+        const result = validateDataAgainstSchema(invalid);
+        assertFalse(result.valid, 'Validation should fail when required fields are missing');
+        assertTrue(
+            result.errors.some(err => err.includes('id')),
+            'Expected error message to mention missing id'
+        );
+    });
+});
 
 // Test Suite 1: Different Expiry Types - Calendar Reset
 runner.suite('Expiry Types - Calendar Reset', ({ test }) => {
