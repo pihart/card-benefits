@@ -246,8 +246,9 @@ class AIAssistant {
                 if (hasWord('ignore')) {
                     benefit.ignored = true;
                     const until = new Date(this.app.today);
-                    until.setMonth(until.getMonth() + 1);
                     until.setHours(0, 0, 0, 0);
+                    until.setDate(1);
+                    until.setMonth(until.getMonth() + 1);
                     benefit.ignoredEndDate = until.toISOString();
                     matches.push({ cardId: card.id, card: card.name, benefit: benefit.description, action: 'ignored until next month' });
                 }
