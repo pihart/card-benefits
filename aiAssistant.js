@@ -277,16 +277,16 @@ class AIAssistant {
         const modifiedCardIds = new Set(matches.map((m) => m.cardId));
         const cardsToValidate = this.app.cards.filter((c) => modifiedCardIds.has(c.id));
         if (cardsToValidate.length === 0) {
-            this.cards.length = 0;
-            before.forEach((c) => this.cards.push(c));
+            this.app.cards.length = 0;
+            before.forEach((c) => this.app.cards.push(c));
             this.render();
             return 'No matching cards found to update.';
         }
 
         const validation = validateDataAgainstSchema(cardsToValidate.map((c) => c.toJSON()));
         if (!validation.valid) {
-            this.cards.length = 0;
-            before.forEach((c) => this.cards.push(c));
+            this.app.cards.length = 0;
+            before.forEach((c) => this.app.cards.push(c));
             this.render();
             return `Schema validation failed: ${validation.errors.join('; ')}`;
         }
