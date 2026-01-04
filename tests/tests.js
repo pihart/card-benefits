@@ -730,6 +730,77 @@ runner.suite('Expiring Soon Detection', ({ test }) => {
     });
 });
 
+runner.suite('Expiring Soon Filters', ({ test }) => {
+    function setupMockDOM() {
+        global.document = {
+            getElementById: (id) => {
+                const mocks = {
+                    'loading-indicator': { style: {} },
+                    'card-list-container': { innerHTML: '', querySelectorAll: () => [], appendChild: () => {} },
+                    'expiring-days-select': { value: '30', addEventListener: () => {} },
+                    'expiring-min-amount': { value: '0', addEventListener: () => {} },
+                    'collapse-sections-checkbox': { checked: false, addEventListener: () => {} },
+                    'add-card-form': { addEventListener: () => {} },
+                    'show-add-card-btn': { style: {}, addEventListener: () => {} },
+                    'new-card-name': {},
+                    'new-card-anniversary': {},
+                    'settings-save': { onclick: null },
+                    's3-url-input': {},
+                    'poll-interval-input': {},
+                    'current-storage-label': { textContent: '' },
+                    'custom-date-input': { value: '', addEventListener: () => {} },
+                    'clear-custom-date-btn': { addEventListener: () => {} },
+                    'modal-ok': { onclick: null },
+                    'modal-cancel': { onclick: null },
+                    'settings-btn': { onclick: null },
+                    'settings-cancel': { onclick: null },
+                    'use-local-storage-btn': { onclick: null },
+                    'expiring-active-list': { textContent: '', appendChild: () => {} },
+                    'expiring-subsections': { textContent: '', appendChild: () => {} }
+                };
+                return mocks[id] || { addEventListener: () => {}, style: {}, textContent: '' };
+            },
+            querySelector: () => ({ addEventListener: () => {} }),
+            querySelectorAll: () => [],
+            addEventListener: () => {}
+        };
+        global.window = {
+            addEventListener: () => {}
+        };
+        global.localStorage = {
+            getItem: () => null,
+            setItem: () => {}
+        };
+    }
+
+    global.UIRenderer = class {
+        constructor(app) {
+            this.app = app;
+        }
+    };
+
+    test('filterExpiringItems respects minimum amount threshold', () => {
+        setupMockDOM();
+        if (typeof BenefitTrackerApp === 'undefined') {
+            loadModule(path.join(__dirname, '../app.js'));
+        }
+
+        const app = new BenefitTrackerApp();
+        app.expiringMinAmount = 20;
+
+        const items = [
+            { remainingAmount: 10, benefit: { totalAmount: 50 } },
+            { remainingAmount: 25, benefit: { totalAmount: 25 } },
+            { remainingAmount: 0, benefit: { totalAmount: 30 } },
+            { remainingAmount: 5, minSpend: { description: 'Spend requirement' } }
+        ];
+
+        const filtered = app.filterExpiringItems(items);
+        assertArrayLength(filtered, 2, 'Should keep items meeting minimum amount');
+        assertTrue(filtered.every(item => app.getExpiringItemValue(item) >= 20), 'All remaining items should meet threshold');
+    });
+});
+
 // Test Suite: Default Expiring Threshold
 runner.suite('Default Expiring Threshold', ({ test }) => {
     // Mock the DOM elements required by the app
@@ -783,7 +854,9 @@ runner.suite('Default Expiring Threshold', ({ test }) => {
 
     test('calculateActiveEntriesForThreshold with no benefits', () => {
         setupMockDOM();
-        loadModule(path.join(__dirname, '../app.js'));
+        if (typeof BenefitTrackerApp === 'undefined') {
+            loadModule(path.join(__dirname, '../app.js'));
+        }
         
         const app = new BenefitTrackerApp();
         app.cards = [];
