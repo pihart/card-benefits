@@ -377,9 +377,10 @@ class Benefit {
      * @param {number} amount
      * @param {string} justification
      * @param {string|null} reminderDate
+     * @param {string|null} chargeDate
      * @returns {Object|null} The created justification entry or null if failed
      */
-    addCarryoverInstanceJustification(instanceIndex, amount, justification, reminderDate = null) {
+    addCarryoverInstanceJustification(instanceIndex, amount, justification, reminderDate = null, chargeDate = null) {
         if (!this.isCarryoverBenefit()) return null;
         if (!this.earnedInstances || !this.earnedInstances[instanceIndex]) return null;
         
@@ -393,6 +394,7 @@ class Benefit {
             amount: amount,
             justification: justification,
             reminderDate: reminderDate,
+            chargeDate: chargeDate,
             confirmed: false
         };
         instance.usageJustifications.push(entry);
@@ -472,14 +474,16 @@ class Benefit {
      * @param {number} amount - The amount used for this justification
      * @param {string} justification - The justification text (e.g., "Trip to Spain")
      * @param {string|null} reminderDate - Optional ISO date string for reminder
+     * @param {string|null} chargeDate - Optional ISO date string for when the charge occurred
      * @returns {Object} The created justification entry
      */
-    addUsageJustification(amount, justification, reminderDate = null) {
+    addUsageJustification(amount, justification, reminderDate = null, chargeDate = null) {
         const entry = {
             id: `just-${Math.random().toString(36).substr(2, 9)}`,
             amount: amount,
             justification: justification,
             reminderDate: reminderDate,
+            chargeDate: chargeDate,
             confirmed: false
         };
         this.usageJustifications.push(entry);

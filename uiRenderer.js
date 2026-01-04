@@ -1697,6 +1697,19 @@ class UIRenderer {
                 };
                 instanceSection.appendChild(addBtn);
                 
+                // Quick add usage button
+                const quickAddBtn = document.createElement('button');
+                quickAddBtn.className = 'secondary-btn';
+                quickAddBtn.textContent = '⚡ Quick Add Usage';
+                quickAddBtn.style.marginTop = '10px';
+                quickAddBtn.style.marginLeft = '10px';
+                quickAddBtn.onclick = () => {
+                    const form = this.createQuickUsageForm(benefit, true, index, quickAddBtn);
+                    instanceSection.insertBefore(form, addBtn);
+                    quickAddBtn.style.display = 'none';
+                };
+                instanceSection.appendChild(quickAddBtn);
+                
                 modalContent.appendChild(instanceSection);
             });
         } else {
@@ -1716,6 +1729,19 @@ class UIRenderer {
                 addBtn.style.display = 'none';
             };
             modalContent.appendChild(addBtn);
+            
+            // Quick add usage button
+            const quickAddBtn = document.createElement('button');
+            quickAddBtn.className = 'secondary-btn';
+            quickAddBtn.textContent = '⚡ Quick Add Usage';
+            quickAddBtn.style.marginTop = '10px';
+            quickAddBtn.style.marginLeft = '10px';
+            quickAddBtn.onclick = () => {
+                const form = this.createQuickUsageForm(benefit, false, null, quickAddBtn);
+                modalContent.insertBefore(form, addBtn);
+                quickAddBtn.style.display = 'none';
+            };
+            modalContent.appendChild(quickAddBtn);
         }
         
         // Summary info
@@ -1836,6 +1862,15 @@ class UIRenderer {
                 badges.appendChild(reminderBadge);
             }
             
+            if (just.chargeDate) {
+                const chargeBadge = document.createElement('span');
+                const chargeDate = new Date(just.chargeDate);
+                chargeBadge.textContent = `📅 ${chargeDate.toLocaleDateString()}`;
+                chargeBadge.style.fontSize = '0.8rem';
+                chargeBadge.style.color = '#2196f3';
+                badges.appendChild(chargeBadge);
+            }
+            
             header.appendChild(badges);
             li.appendChild(header);
             
@@ -1860,6 +1895,18 @@ class UIRenderer {
                     } else {
                         this.app.handleConfirmJustification(benefit.id, just.id);
                     }
+                    
+                    // Close and reopen modal to refresh
+                    const modalOverlay = confirmBtn.closest('.modal-overlay');
+                    if (modalOverlay) {
+                        document.body.removeChild(modalOverlay);
+                        const card = this.app.cards.find(c => c.findBenefit(benefit.id));
+                        if (card) {
+                            const updatedBenefit = card.findBenefit(benefit.id);
+                            const activeInstances = isCarryover ? this.app.getActiveCarryoverInstances(updatedBenefit) : null;
+                            this.showJustificationsModal(updatedBenefit, card, activeInstances);
+                        }
+                    }
                 };
                 actions.appendChild(confirmBtn);
             }
@@ -1875,6 +1922,18 @@ class UIRenderer {
                         this.app.handleRemoveCarryoverJustification(benefit.id, instanceIndex, just.id);
                     } else {
                         this.app.handleRemoveJustification(benefit.id, just.id);
+                    }
+                    
+                    // Close and reopen modal to refresh
+                    const modalOverlay = deleteBtn.closest('.modal-overlay');
+                    if (modalOverlay) {
+                        document.body.removeChild(modalOverlay);
+                        const card = this.app.cards.find(c => c.findBenefit(benefit.id));
+                        if (card) {
+                            const updatedBenefit = card.findBenefit(benefit.id);
+                            const activeInstances = isCarryover ? this.app.getActiveCarryoverInstances(updatedBenefit) : null;
+                            this.showJustificationsModal(updatedBenefit, card, activeInstances);
+                        }
                     }
                 }
             };
@@ -1914,6 +1973,11 @@ class UIRenderer {
                 <textarea name="justification" placeholder="E.g., Trip to Spain" required style="width: 100%; padding: 8px; min-height: 60px;"></textarea>
             </div>
             <div style="margin-bottom: 10px;">
+                <label style="display: block; margin-bottom: 5px;">Charge Date (optional)</label>
+                <input type="date" name="chargeDate" style="width: 100%; padding: 8px;">
+                <small style="color: #666;">When did this charge occur?</small>
+            </div>
+            <div style="margin-bottom: 10px;">
                 <label style="display: block; margin-bottom: 5px;">Reminder Date (optional)</label>
                 <input type="date" name="reminderDate" style="width: 100%; padding: 8px;">
                 <small style="color: #666;">Set a reminder to confirm this charge posted</small>
@@ -1930,11 +1994,25 @@ class UIRenderer {
             const amount = parseFloat(formData.get('amount'));
             const justification = formData.get('justification');
             const reminderDate = formData.get('reminderDate') || null;
+            const chargeDate = formData.get('chargeDate') || null;
             
             if (isCarryover) {
-                this.app.handleAddCarryoverJustification(benefit.id, instanceIndex, amount, justification, reminderDate);
+                this.app.handleAddCarryoverJustification(benefit.id, instanceIndex, amount, justification, reminderDate, chargeDate);
             } else {
-                this.app.handleAddJustification(benefit.id, amount, justification, reminderDate);
+                this.app.handleAddJustification(benefit.id, amount, justification, reminderDate, chargeDate);
+            }
+            
+            // Close and reopen modal to refresh content
+            const modalOverlay = form.closest('.modal-overlay');
+            if (modalOverlay) {
+                document.body.removeChild(modalOverlay);
+                // Reopen the modal with updated data
+                const card = this.app.cards.find(c => c.findBenefit(benefit.id));
+                if (card) {
+                    const updatedBenefit = card.findBenefit(benefit.id);
+                    const activeInstances = isCarryover ? this.app.getActiveCarryoverInstances(updatedBenefit) : null;
+                    this.showJustificationsModal(updatedBenefit, card, activeInstances);
+                }
             }
         };
         
@@ -1943,6 +2021,88 @@ class UIRenderer {
             // Re-show the add button using the passed reference
             if (addBtn) {
                 addBtn.style.display = 'block';
+            }
+        };
+        
+        return form;
+    }
+
+    /**
+     * Creates a form for quickly adding a usage entry (increments used and adds justification).
+     * @param {Benefit} benefit - The benefit
+     * @param {boolean} isCarryover - Whether this is for a carryover instance
+     * @param {number|null} instanceIndex - Instance index for carryover
+     * @param {HTMLElement} quickAddBtn - Reference to the quick add button to re-show on cancel
+     * @returns {HTMLElement}
+     */
+    createQuickUsageForm(benefit, isCarryover, instanceIndex, quickAddBtn) {
+        const form = document.createElement('form');
+        form.style.padding = '15px';
+        form.style.backgroundColor = '#e3f2fd';
+        form.style.borderRadius = '5px';
+        form.style.marginBottom = '15px';
+        form.style.border = '2px solid #2196f3';
+        
+        form.innerHTML = `
+            <h4 style="margin-top: 0; color: #1976d2;">⚡ Quick Add Usage</h4>
+            <p style="margin: 0 0 10px 0; font-size: 0.9rem; color: #666;">This will increment the used amount and add a justification</p>
+            <div style="margin-bottom: 10px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Amount</label>
+                <input type="number" name="amount" placeholder="0.00" min="0.01" step="0.01" required style="width: 100%; padding: 8px;">
+            </div>
+            <div style="margin-bottom: 10px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Description</label>
+                <textarea name="justification" placeholder="E.g., Trip to Spain" required style="width: 100%; padding: 8px; min-height: 60px;"></textarea>
+            </div>
+            <div style="margin-bottom: 10px;">
+                <label style="display: block; margin-bottom: 5px;">Charge Date (optional)</label>
+                <input type="date" name="chargeDate" style="width: 100%; padding: 8px;">
+                <small style="color: #666;">When did this charge occur?</small>
+            </div>
+            <div style="margin-bottom: 10px;">
+                <label style="display: block; margin-bottom: 5px;">Reminder Date (optional)</label>
+                <input type="date" name="reminderDate" style="width: 100%; padding: 8px;">
+                <small style="color: #666;">Set a reminder to confirm this charge posted</small>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button type="submit" style="background-color: #2196f3;">Add & Increment Used</button>
+                <button type="button" class="secondary-btn cancel-btn">Cancel</button>
+            </div>
+        `;
+        
+        form.onsubmit = (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const amount = parseFloat(formData.get('amount'));
+            const justification = formData.get('justification');
+            const reminderDate = formData.get('reminderDate') || null;
+            const chargeDate = formData.get('chargeDate') || null;
+            
+            if (isCarryover) {
+                this.app.handleAddCarryoverUsageEntry(benefit.id, instanceIndex, amount, justification, reminderDate, chargeDate);
+            } else {
+                this.app.handleAddUsageEntry(benefit.id, amount, justification, reminderDate, chargeDate);
+            }
+            
+            // Close and reopen modal to refresh content
+            const modalOverlay = form.closest('.modal-overlay');
+            if (modalOverlay) {
+                document.body.removeChild(modalOverlay);
+                // Reopen the modal with updated data
+                const card = this.app.cards.find(c => c.findBenefit(benefit.id));
+                if (card) {
+                    const updatedBenefit = card.findBenefit(benefit.id);
+                    const activeInstances = isCarryover ? this.app.getActiveCarryoverInstances(updatedBenefit) : null;
+                    this.showJustificationsModal(updatedBenefit, card, activeInstances);
+                }
+            }
+        };
+        
+        form.querySelector('.cancel-btn').onclick = () => {
+            form.remove();
+            // Re-show the quick add button using the passed reference
+            if (quickAddBtn) {
+                quickAddBtn.style.display = 'inline-block';
             }
         };
         
