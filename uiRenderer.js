@@ -1162,14 +1162,7 @@ class UIRenderer {
         const moreBtn = document.createElement('button');
         moreBtn.className = 'secondary-btn';
         moreBtn.textContent = '⋯ More';
-        moreBtn.onclick = (e) => {
-            e.stopPropagation();
-            const menu = moreBtn.nextElementSibling;
-            if (menu && menu.classList.contains('more-options-menu')) {
-                menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
-            }
-        };
-
+        
         // Dropdown menu
         const moreMenu = document.createElement('div');
         moreMenu.className = 'more-options-menu';
@@ -1184,6 +1177,14 @@ class UIRenderer {
         moreMenu.style.zIndex = '1000';
         moreMenu.style.minWidth = '150px';
         moreMenu.style.marginTop = '4px';
+        
+        // Set onclick after creating moreMenu so we can reference it
+        moreBtn.onclick = (e) => {
+            e.stopPropagation();
+            // Toggle menu display
+            const isVisible = moreMenu.style.display === 'block';
+            moreMenu.style.display = isVisible ? 'none' : 'block';
+        };
 
         const justifyOption = document.createElement('button');
         justifyOption.className = 'more-option-item';
@@ -1229,12 +1230,25 @@ class UIRenderer {
         rightControls.appendChild(moreMenu);
         controlsDiv.appendChild(rightControls);
 
-        // Close dropdown when clicking outside
-        document.addEventListener('click', (e) => {
-            if (!rightControls.contains(e.target)) {
-                moreMenu.style.display = 'none';
+        // Close dropdown when clicking anywhere outside
+        setTimeout(() => {
+            const closeMenuHandler = (e) => {
+                if (!rightControls.contains(e.target)) {
+                    moreMenu.style.display = 'none';
+                    document.removeEventListener('click', closeMenuHandler);
+                }
+            };
+            // Only add if menu is visible
+            if (moreMenu.style.display === 'block') {
+                document.addEventListener('click', closeMenuHandler);
             }
-        });
+            // Also add when button is clicked
+            moreBtn.addEventListener('click', () => {
+                if (moreMenu.style.display === 'block') {
+                    setTimeout(() => document.addEventListener('click', closeMenuHandler), 0);
+                }
+            });
+        }, 0);
 
         li.appendChild(detailsDiv);
         li.appendChild(metaDiv);
@@ -2258,6 +2272,19 @@ class UIRenderer {
         const reminderInput = formContainer.querySelector('.quick-add-reminder');
         const submitBtn = formContainer.querySelector('.quick-add-submit');
         const cancelBtn = formContainer.querySelector('.quick-add-cancel');
+        
+        // Set default dates
+        const today = new Date(this.app.today);
+        const todayStr = today.toISOString().split('T')[0];
+        chargeDateInput.value = todayStr;
+        
+        // Set reminder to charge date + 3 days if it hasn't passed yet
+        const reminderDate = new Date(today);
+        reminderDate.setDate(reminderDate.getDate() + 3);
+        if (reminderDate > today) {
+            reminderInput.value = reminderDate.toISOString().split('T')[0];
+        }
+        // Otherwise leave blank (default)
         
         submitBtn.onclick = (e) => {
             e.stopPropagation();
