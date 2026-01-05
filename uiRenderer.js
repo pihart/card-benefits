@@ -1143,30 +1143,98 @@ class UIRenderer {
             controlsDiv.appendChild(inputWrapper);
         }
 
+        // Quick Add Usage button
+        const quickAddBtn = document.createElement('button');
+        quickAddBtn.className = 'secondary-btn';
+        quickAddBtn.textContent = '⚡ Quick Add';
+        quickAddBtn.style.marginLeft = '10px';
+        quickAddBtn.onclick = (e) => {
+            e.stopPropagation();
+            this.showQuickAddInline(benefit, card, li, isCarryover ? activeInstances : null);
+        };
+        controlsDiv.appendChild(quickAddBtn);
+
+        // More Options dropdown
         const rightControls = document.createElement('div');
         rightControls.className = 'controls-right';
+        rightControls.style.position = 'relative';
         
-        const justifyBtn = document.createElement('button');
-        justifyBtn.className = 'secondary-btn';
-        justifyBtn.textContent = '📝 Justifications';
-        justifyBtn.onclick = (e) => {
+        const moreBtn = document.createElement('button');
+        moreBtn.className = 'secondary-btn';
+        moreBtn.textContent = '⋯ More';
+        moreBtn.onclick = (e) => {
             e.stopPropagation();
+            const menu = moreBtn.nextElementSibling;
+            if (menu && menu.classList.contains('more-options-menu')) {
+                menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+            }
+        };
+
+        // Dropdown menu
+        const moreMenu = document.createElement('div');
+        moreMenu.className = 'more-options-menu';
+        moreMenu.style.display = 'none';
+        moreMenu.style.position = 'absolute';
+        moreMenu.style.right = '0';
+        moreMenu.style.top = '100%';
+        moreMenu.style.backgroundColor = 'white';
+        moreMenu.style.border = '1px solid #ddd';
+        moreMenu.style.borderRadius = '4px';
+        moreMenu.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+        moreMenu.style.zIndex = '1000';
+        moreMenu.style.minWidth = '150px';
+        moreMenu.style.marginTop = '4px';
+
+        const justifyOption = document.createElement('button');
+        justifyOption.className = 'more-option-item';
+        justifyOption.textContent = '📝 Justifications';
+        justifyOption.style.cssText = 'display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer;';
+        justifyOption.onmouseover = () => justifyOption.style.backgroundColor = '#f0f0f0';
+        justifyOption.onmouseout = () => justifyOption.style.backgroundColor = 'transparent';
+        justifyOption.onclick = (e) => {
+            e.stopPropagation();
+            moreMenu.style.display = 'none';
             this.showJustificationsModal(benefit, card, isCarryover ? activeInstances : null);
         };
-        
-        const editBtn = document.createElement('button');
-        editBtn.className = 'secondary-btn';
-        editBtn.textContent = 'Edit';
-        editBtn.onclick = () => this.renderBenefitEdit(benefit, card);
-        const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'danger-btn';
-        deleteBtn.textContent = 'Delete';
-        deleteBtn.onclick = () => this.app.handleDeleteBenefit(benefit.id);
 
-        rightControls.appendChild(justifyBtn);
-        rightControls.appendChild(editBtn);
-        rightControls.appendChild(deleteBtn);
+        const editOption = document.createElement('button');
+        editOption.className = 'more-option-item';
+        editOption.textContent = '✏️ Edit';
+        editOption.style.cssText = 'display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer;';
+        editOption.onmouseover = () => editOption.style.backgroundColor = '#f0f0f0';
+        editOption.onmouseout = () => editOption.style.backgroundColor = 'transparent';
+        editOption.onclick = (e) => {
+            e.stopPropagation();
+            moreMenu.style.display = 'none';
+            this.renderBenefitEdit(benefit, card);
+        };
+
+        const deleteOption = document.createElement('button');
+        deleteOption.className = 'more-option-item';
+        deleteOption.textContent = '🗑️ Delete';
+        deleteOption.style.cssText = 'display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; color: #d32f2f;';
+        deleteOption.onmouseover = () => deleteOption.style.backgroundColor = '#ffebee';
+        deleteOption.onmouseout = () => deleteOption.style.backgroundColor = 'transparent';
+        deleteOption.onclick = (e) => {
+            e.stopPropagation();
+            moreMenu.style.display = 'none';
+            this.app.handleDeleteBenefit(benefit.id);
+        };
+
+        moreMenu.appendChild(justifyOption);
+        moreMenu.appendChild(editOption);
+        moreMenu.appendChild(deleteOption);
+
+        rightControls.appendChild(moreBtn);
+        rightControls.appendChild(moreMenu);
         controlsDiv.appendChild(rightControls);
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!rightControls.contains(e.target)) {
+                moreMenu.style.display = 'none';
+            }
+        });
 
         li.appendChild(detailsDiv);
         li.appendChild(metaDiv);
@@ -2107,5 +2175,119 @@ class UIRenderer {
         };
         
         return form;
+    }
+
+    /**
+     * Shows the quick add usage form inline on the benefit item.
+     * @param {Benefit} benefit - The benefit
+     * @param {Card} card - The parent card
+     * @param {HTMLElement} benefitElement - The benefit list item element
+     * @param {Array|null} instances - For carryover benefits, the active instances
+     */
+    showQuickAddInline(benefit, card, benefitElement, instances = null) {
+        const isCarryover = this._isCarryoverBenefit(benefit);
+        
+        // Check if form already exists
+        const existingForm = benefitElement.querySelector('.inline-quick-add-form');
+        if (existingForm) {
+            existingForm.remove();
+            return;
+        }
+        
+        const formContainer = document.createElement('div');
+        formContainer.className = 'inline-quick-add-form';
+        formContainer.style.cssText = 'padding: 15px; margin-top: 10px; background-color: #e3f2fd; border-radius: 5px; border: 2px solid #2196f3;';
+        
+        // For carryover benefits, show instance selector
+        if (isCarryover && instances && instances.length > 0) {
+            const instanceSelector = document.createElement('div');
+            instanceSelector.style.marginBottom = '10px';
+            
+            const label = document.createElement('label');
+            label.textContent = 'Select Credit Year: ';
+            label.style.fontWeight = 'bold';
+            
+            const select = document.createElement('select');
+            select.style.padding = '5px';
+            select.style.marginLeft = '8px';
+            
+            instances.forEach((instance, index) => {
+                const earnYear = CarryoverCycle.getEarnYear(instance.earnedDate);
+                const option = document.createElement('option');
+                option.value = index;
+                option.textContent = `${earnYear} Credit`;
+                select.appendChild(option);
+            });
+            
+            instanceSelector.appendChild(label);
+            instanceSelector.appendChild(select);
+            formContainer.appendChild(instanceSelector);
+            formContainer.instanceSelect = select; // Store reference
+        }
+        
+        formContainer.innerHTML += `
+            <h4 style="margin-top: 0; color: #1976d2;">⚡ Quick Add Usage</h4>
+            <div style="display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 100px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold; font-size: 0.9rem;">Amount</label>
+                    <input type="number" class="quick-add-amount" placeholder="0.00" min="0.01" step="0.01" required style="width: 100%; padding: 6px;">
+                </div>
+                <div style="flex: 2; min-width: 150px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold; font-size: 0.9rem;">Description</label>
+                    <input type="text" class="quick-add-desc" placeholder="E.g., Trip to Spain" required style="width: 100%; padding: 6px;">
+                </div>
+                <div style="flex: 1; min-width: 120px;">
+                    <label style="display: block; margin-bottom: 5px; font-size: 0.9rem;">Charge Date</label>
+                    <input type="date" class="quick-add-charge-date" style="width: 100%; padding: 6px;">
+                </div>
+                <div style="flex: 1; min-width: 120px;">
+                    <label style="display: block; margin-bottom: 5px; font-size: 0.9rem;">Reminder</label>
+                    <input type="date" class="quick-add-reminder" style="width: 100%; padding: 6px;">
+                </div>
+                <div style="display: flex; gap: 5px;">
+                    <button class="quick-add-submit" style="background-color: #2196f3; color: white; padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer;">Add</button>
+                    <button class="quick-add-cancel" style="background-color: #666; color: white; padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer;">Cancel</button>
+                </div>
+            </div>
+        `;
+        
+        // Get references after innerHTML is set
+        const amountInput = formContainer.querySelector('.quick-add-amount');
+        const descInput = formContainer.querySelector('.quick-add-desc');
+        const chargeDateInput = formContainer.querySelector('.quick-add-charge-date');
+        const reminderInput = formContainer.querySelector('.quick-add-reminder');
+        const submitBtn = formContainer.querySelector('.quick-add-submit');
+        const cancelBtn = formContainer.querySelector('.quick-add-cancel');
+        
+        submitBtn.onclick = (e) => {
+            e.stopPropagation();
+            const amount = parseFloat(amountInput.value);
+            const description = descInput.value.trim();
+            
+            if (!amount || amount <= 0 || !description) {
+                alert('Please enter a valid amount and description');
+                return;
+            }
+            
+            const chargeDate = chargeDateInput.value || null;
+            const reminderDate = reminderInput.value || null;
+            
+            if (isCarryover && instances && instances.length > 0) {
+                const instanceIndex = parseInt(formContainer.instanceSelect.value);
+                this.app.handleAddCarryoverUsageEntry(benefit.id, instanceIndex, amount, description, reminderDate, chargeDate);
+            } else {
+                this.app.handleAddUsageEntry(benefit.id, amount, description, reminderDate, chargeDate);
+            }
+            
+            formContainer.remove();
+        };
+        
+        cancelBtn.onclick = (e) => {
+            e.stopPropagation();
+            formContainer.remove();
+        };
+        
+        benefitElement.appendChild(formContainer);
+        amountInput.focus();
     }
 }
