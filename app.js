@@ -12,6 +12,7 @@ class BenefitTrackerApp {
         this.cards = [];
         this.today = new Date();
         this.expiringDays = 30;
+        this.expiringMinAmount = 0;
         this.pollInterval = 800;
         this.collapseSections = false; // Setting to group fully utilized/ignored items into sections
         this.hideMonthlyExpiring = false; // Setting to hide monthly benefits from Expiring Soon
@@ -27,6 +28,7 @@ class BenefitTrackerApp {
         this.loadingIndicator = document.getElementById('loading-indicator');
         this.cardListContainer = document.getElementById('card-list-container');
         this.expiringDaysSelect = document.getElementById('expiring-days-select');
+        this.expiringMinAmountInput = document.getElementById('expiring-min-amount');
 
         // Add Card Form Logic
         this.addCardFormContainer = document.querySelector('.card-form-container');
@@ -59,6 +61,14 @@ class BenefitTrackerApp {
             this.userSelectedThreshold = true; // Mark as user selection
             this.render();
         });
+        if (this.expiringMinAmountInput) {
+            this.expiringMinAmountInput.addEventListener('change', (e) => {
+                const newVal = parseFloat(e.target.value);
+                this.expiringMinAmount = isNaN(newVal) ? 0 : Math.max(0, newVal);
+                localStorage.setItem('creditCardBenefitTracker_expiringMinAmount', this.expiringMinAmount.toString());
+                this.render();
+            });
+        }
 
         this.showAddCardBtn.addEventListener('click', () => {
             this.showAddCardBtn.style.display = 'none';
@@ -103,6 +113,16 @@ class BenefitTrackerApp {
         const storedCustomDate = localStorage.getItem('creditCardBenefitTracker_customDate');
         this.setCurrentDate(storedCustomDate);
         this.expiringDays = parseInt(this.expiringDaysSelect.value, 10);
+        const storedMinAmount = localStorage.getItem('creditCardBenefitTracker_expiringMinAmount');
+        if (storedMinAmount !== null) {
+            this.expiringMinAmount = Math.max(0, parseFloat(storedMinAmount) || 0);
+            if (this.expiringMinAmountInput) {
+                this.expiringMinAmountInput.value = this.expiringMinAmount.toString();
+            }
+        } else if (this.expiringMinAmountInput) {
+            const parsedMin = parseFloat(this.expiringMinAmountInput.value);
+            this.expiringMinAmount = isNaN(parsedMin) ? 0 : Math.max(0, parsedMin);
+        }
 
         const storedInterval = localStorage.getItem('creditCardBenefitTracker_pollInterval');
         if (storedInterval) this.pollInterval = parseInt(storedInterval, 10);
@@ -641,6 +661,27 @@ class BenefitTrackerApp {
         }
     }
 
+    getExpiringItemValue(item) {
+        if (!item) return 0;
+        if (typeof item.remainingAmount === 'number' && item.remainingAmount > 0) {
+            return item.remainingAmount;
+        }
+        if (item.minSpend && typeof item.remainingAmount === 'number') {
+            return item.remainingAmount;
+        }
+        if (item.benefit && typeof item.benefit.totalAmount === 'number') {
+            return item.benefit.totalAmount;
+        }
+        if (typeof item.remainingAmount === 'number') return item.remainingAmount;
+        return 0;
+    }
+
+    filterExpiringItems(items) {
+        const min = this.expiringMinAmount || 0;
+        if (!Array.isArray(items) || min <= 0) return items;
+        return items.filter(item => this.getExpiringItemValue(item) >= min);
+    }
+
     // --- Rendering Proxy ---
     render() {
         const progressState = new Map();
@@ -798,9 +839,13 @@ class BenefitTrackerApp {
         expiringIgnored.sort(sortFn);
         expiringFullyUsed.sort((a, b) => a.nextResetDate - b.nextResetDate);
         pendingMinSpends.sort((a, b) => a.deadline - b.deadline);
+        const filteredActive = this.filterExpiringItems(expiringActive);
+        const filteredIgnored = this.filterExpiringItems(expiringIgnored);
+        const filteredFullyUsed = this.filterExpiringItems(expiringFullyUsed);
+        const filteredMinSpends = this.filterExpiringItems(pendingMinSpends);
 
         // 3. Render Expiring
-        this.ui.renderExpiringSoon(expiringActive, expiringIgnored, expiringFullyUsed, pendingMinSpends, this.expiringDays, mainWidgetOpen, ignoredSectionOpen, fullyUsedSectionOpen, minSpendSectionOpen);
+        this.ui.renderExpiringSoon(filteredActive, filteredIgnored, filteredFullyUsed, filteredMinSpends, this.expiringDays, mainWidgetOpen, ignoredSectionOpen, fullyUsedSectionOpen, minSpendSectionOpen);
 
         // 4. Render Cards
         this.cardListContainer.innerHTML = '';

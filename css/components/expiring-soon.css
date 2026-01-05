@@ -49,6 +49,7 @@
 .expiring-controls {
     display: flex;
     justify-content: flex-end;
+    gap: 12px;
     margin-bottom: 15px;
 }
 
@@ -69,6 +70,12 @@
 
 .expiring-controls .form-group select {
     width: auto;
+    font-size: 0.85rem;
+    padding: 3px 8px;
+}
+
+.expiring-controls .form-group input[type="number"] {
+    width: 90px;
     font-size: 0.85rem;
     padding: 3px 8px;
 }
