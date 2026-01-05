@@ -42,7 +42,7 @@ class AIAssistant {
     }
 
     availabilitySupported() {
-        return !!this.getModelApi();
+        return typeof window !== 'undefined' && typeof LanguageModel !== 'undefined';
     }
 
     setStatus(text) {
@@ -73,8 +73,7 @@ class AIAssistant {
             return;
         }
         try {
-            const api = this.getModelApi();
-            const caps = await api.capabilities();
+            const caps = await LanguageModel.capabilities();
             if (caps.available === 'readily') {
                 this.modelReady = true;
                 this.setStatus('Model ready');
@@ -113,8 +112,7 @@ class AIAssistant {
         if (!this.availabilitySupported()) return;
         if (this.progressShellEl) this.progressShellEl.classList.add('indeterminate');
         try {
-            const api = this.getModelApi();
-            this.session = await api.create({
+            this.session = await LanguageModel.create({
                 systemPrompt: this.baseSystemPrompt()
             });
             this.modelReady = true;
@@ -133,8 +131,7 @@ class AIAssistant {
     async ensureSession() {
         if (this.session || !this.availabilitySupported()) return this.session;
         try {
-            const api = this.getModelApi();
-            this.session = await api.create({
+            this.session = await LanguageModel.create({
                 systemPrompt: this.baseSystemPrompt()
             });
             this.modelReady = true;
