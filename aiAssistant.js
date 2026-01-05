@@ -26,9 +26,7 @@ class AIAssistant {
 
     getModelApi() {
         if (typeof window === 'undefined') return null;
-        if (window.LanguageModel) return window.LanguageModel;
-        if (window.ai && window.ai.languageModel) return window.ai.languageModel;
-        return null;
+        return window.LanguageModel || null;
     }
 
     attachListeners() {
