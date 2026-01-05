@@ -24,6 +24,13 @@ class AIAssistant {
         this.refreshAvailability();
     }
 
+    getModelApi() {
+        if (typeof window === 'undefined') return null;
+        if (window.LanguageModel) return window.LanguageModel;
+        if (window.ai && window.ai.languageModel) return window.ai.languageModel;
+        return null;
+    }
+
     attachListeners() {
         if (this.formEl) {
             this.formEl.addEventListener('submit', (e) => {
@@ -37,7 +44,7 @@ class AIAssistant {
     }
 
     availabilitySupported() {
-        return typeof window !== 'undefined' && window.ai && window.ai.languageModel;
+        return !!this.getModelApi();
     }
 
     setStatus(text) {
@@ -68,7 +75,8 @@ class AIAssistant {
             return;
         }
         try {
-            const caps = await window.ai.languageModel.capabilities();
+            const api = this.getModelApi();
+            const caps = await api.capabilities();
             if (caps.available === 'readily') {
                 this.modelReady = true;
                 this.setStatus('Model ready');
@@ -107,7 +115,8 @@ class AIAssistant {
         if (!this.availabilitySupported()) return;
         if (this.progressShellEl) this.progressShellEl.classList.add('indeterminate');
         try {
-            this.session = await window.ai.languageModel.create({
+            const api = this.getModelApi();
+            this.session = await api.create({
                 systemPrompt: this.baseSystemPrompt()
             });
             this.modelReady = true;
@@ -126,7 +135,8 @@ class AIAssistant {
     async ensureSession() {
         if (this.session || !this.availabilitySupported()) return this.session;
         try {
-            this.session = await window.ai.languageModel.create({
+            const api = this.getModelApi();
+            this.session = await api.create({
                 systemPrompt: this.baseSystemPrompt()
             });
             this.modelReady = true;
