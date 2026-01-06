@@ -104,6 +104,18 @@ class BenefitTrackerApp {
         
         // Hide monthly in expiring widget listener
         this.hideMonthlyExpiringCheckbox.addEventListener('change', this.handleHideMonthlyExpiringChange.bind(this));
+        
+        // Global click handler to close dropdown menus when clicking outside
+        document.addEventListener('click', (e) => {
+            // Close all dropdown menus when clicking outside
+            const menus = document.querySelectorAll('.more-options-menu');
+            menus.forEach(menu => {
+                const parent = menu.parentElement;
+                if (parent && !parent.contains(e.target)) {
+                    menu.style.display = 'none';
+                }
+            });
+        });
     }
 
     // ... (init and initLiveSync unchanged) ...

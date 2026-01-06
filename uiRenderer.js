@@ -1178,10 +1178,18 @@ class UIRenderer {
         moreMenu.style.minWidth = '150px';
         moreMenu.style.marginTop = '4px';
         
-        // Set onclick after creating moreMenu so we can reference it
+        // Toggle menu on button click
         moreBtn.onclick = (e) => {
             e.stopPropagation();
-            // Toggle menu display
+            
+            // Close all other open menus first
+            document.querySelectorAll('.more-options-menu').forEach(menu => {
+                if (menu !== moreMenu) {
+                    menu.style.display = 'none';
+                }
+            });
+            
+            // Toggle this menu
             const isVisible = moreMenu.style.display === 'block';
             moreMenu.style.display = isVisible ? 'none' : 'block';
         };
@@ -1229,26 +1237,6 @@ class UIRenderer {
         rightControls.appendChild(moreBtn);
         rightControls.appendChild(moreMenu);
         controlsDiv.appendChild(rightControls);
-
-        // Close dropdown when clicking anywhere outside
-        setTimeout(() => {
-            const closeMenuHandler = (e) => {
-                if (!rightControls.contains(e.target)) {
-                    moreMenu.style.display = 'none';
-                    document.removeEventListener('click', closeMenuHandler);
-                }
-            };
-            // Only add if menu is visible
-            if (moreMenu.style.display === 'block') {
-                document.addEventListener('click', closeMenuHandler);
-            }
-            // Also add when button is clicked
-            moreBtn.addEventListener('click', () => {
-                if (moreMenu.style.display === 'block') {
-                    setTimeout(() => document.addEventListener('click', closeMenuHandler), 0);
-                }
-            });
-        }, 0);
 
         li.appendChild(detailsDiv);
         li.appendChild(metaDiv);
