@@ -104,6 +104,18 @@ class BenefitTrackerApp {
         
         // Hide monthly in expiring widget listener
         this.hideMonthlyExpiringCheckbox.addEventListener('change', this.handleHideMonthlyExpiringChange.bind(this));
+        
+        // Global click handler to close dropdown menus when clicking outside
+        document.addEventListener('click', (e) => {
+            // Close all dropdown menus when clicking outside
+            const menus = document.querySelectorAll('.more-options-menu');
+            menus.forEach(menu => {
+                const parent = menu.parentElement;
+                if (parent && !parent.contains(e.target)) {
+                    menu.style.display = 'none';
+                }
+            });
+        });
     }
 
     // ... (init and initLiveSync unchanged) ...
@@ -1452,6 +1464,285 @@ class BenefitTrackerApp {
         this.hideMonthlyExpiring = e.target.checked;
         localStorage.setItem('creditCardBenefitTracker_hideMonthlyExpiring', this.hideMonthlyExpiring);
         this.render();
+    }
+
+    // ==================== USAGE JUSTIFICATION HANDLERS ====================
+
+    /**
+     * Adds a usage justification to a benefit.
+     * @param {string} benefitId - The benefit ID
+     * @param {number} amount - The amount justified
+     * @param {string} justification - The justification text
+     * @param {string|null} reminderDate - Optional reminder date
+     * @param {string|null} chargeDate - Optional charge date
+     */
+    handleAddJustification(benefitId, amount, justification, reminderDate = null, chargeDate = null) {
+        for (const c of this.cards) {
+            const b = c.findBenefit ? c.findBenefit(benefitId) : c.benefits.find(ben => ben.id === benefitId);
+            if (b) {
+                if (b.addUsageJustification) {
+                    b.addUsageJustification(amount, justification, reminderDate, chargeDate);
+                } else {
+                    // Fallback for plain objects
+                    if (!b.usageJustifications) b.usageJustifications = [];
+                    b.usageJustifications.push({
+                        id: `just-${Math.random().toString(36).substr(2, 9)}`,
+                        amount: amount,
+                        justification: justification,
+                        reminderDate: reminderDate,
+                        chargeDate: chargeDate,
+                        confirmed: false
+                    });
+                }
+                this.saveState();
+                this.render();
+                return;
+            }
+        }
+    }
+
+    /**
+     * Removes a usage justification from a benefit.
+     * @param {string} benefitId - The benefit ID
+     * @param {string} justificationId - The justification ID
+     */
+    handleRemoveJustification(benefitId, justificationId) {
+        for (const c of this.cards) {
+            const b = c.findBenefit ? c.findBenefit(benefitId) : c.benefits.find(ben => ben.id === benefitId);
+            if (b) {
+                if (b.removeUsageJustification) {
+                    b.removeUsageJustification(justificationId);
+                } else {
+                    // Fallback for plain objects
+                    if (b.usageJustifications) {
+                        const idx = b.usageJustifications.findIndex(j => j.id === justificationId);
+                        if (idx > -1) b.usageJustifications.splice(idx, 1);
+                    }
+                }
+                this.saveState();
+                this.render();
+                return;
+            }
+        }
+    }
+
+    /**
+     * Updates a usage justification.
+     * @param {string} benefitId - The benefit ID
+     * @param {string} justificationId - The justification ID
+     * @param {Object} updates - Fields to update
+     */
+    handleUpdateJustification(benefitId, justificationId, updates) {
+        for (const c of this.cards) {
+            const b = c.findBenefit ? c.findBenefit(benefitId) : c.benefits.find(ben => ben.id === benefitId);
+            if (b) {
+                if (b.updateUsageJustification) {
+                    b.updateUsageJustification(justificationId, updates);
+                } else {
+                    // Fallback for plain objects
+                    if (b.usageJustifications) {
+                        const j = b.usageJustifications.find(just => just.id === justificationId);
+                        if (j) Object.assign(j, updates);
+                    }
+                }
+                this.saveState();
+                this.render();
+                return;
+            }
+        }
+    }
+
+    /**
+     * Confirms a justification (marks it as confirmed).
+     * @param {string} benefitId - The benefit ID
+     * @param {string} justificationId - The justification ID
+     */
+    handleConfirmJustification(benefitId, justificationId) {
+        this.handleUpdateJustification(benefitId, justificationId, { confirmed: true });
+    }
+
+    /**
+     * Adds a usage justification to a carryover instance.
+     * @param {string} benefitId - The benefit ID
+     * @param {number} instanceIndex - The carryover instance index
+     * @param {number} amount - The amount justified
+     * @param {string} justification - The justification text
+     * @param {string|null} reminderDate - Optional reminder date
+     * @param {string|null} chargeDate - Optional charge date
+     */
+    handleAddCarryoverJustification(benefitId, instanceIndex, amount, justification, reminderDate = null, chargeDate = null) {
+        for (const c of this.cards) {
+            const b = c.findBenefit ? c.findBenefit(benefitId) : c.benefits.find(ben => ben.id === benefitId);
+            if (b && this._isCarryoverBenefit(b)) {
+                if (b.addCarryoverInstanceJustification) {
+                    b.addCarryoverInstanceJustification(instanceIndex, amount, justification, reminderDate, chargeDate);
+                } else {
+                    // Fallback for plain objects
+                    const instance = b.earnedInstances[instanceIndex];
+                    if (instance) {
+                        if (!instance.usageJustifications) instance.usageJustifications = [];
+                        instance.usageJustifications.push({
+                            id: `just-${Math.random().toString(36).substr(2, 9)}`,
+                            amount: amount,
+                            justification: justification,
+                            reminderDate: reminderDate,
+                            chargeDate: chargeDate,
+                            confirmed: false
+                        });
+                    }
+                }
+                this.saveState();
+                this.render();
+                return;
+            }
+        }
+    }
+
+    /**
+     * Removes a usage justification from a carryover instance.
+     * @param {string} benefitId - The benefit ID
+     * @param {number} instanceIndex - The carryover instance index
+     * @param {string} justificationId - The justification ID
+     */
+    handleRemoveCarryoverJustification(benefitId, instanceIndex, justificationId) {
+        for (const c of this.cards) {
+            const b = c.findBenefit ? c.findBenefit(benefitId) : c.benefits.find(ben => ben.id === benefitId);
+            if (b && this._isCarryoverBenefit(b)) {
+                if (b.removeCarryoverInstanceJustification) {
+                    b.removeCarryoverInstanceJustification(instanceIndex, justificationId);
+                } else {
+                    // Fallback for plain objects
+                    const instance = b.earnedInstances[instanceIndex];
+                    if (instance && instance.usageJustifications) {
+                        const idx = instance.usageJustifications.findIndex(j => j.id === justificationId);
+                        if (idx > -1) instance.usageJustifications.splice(idx, 1);
+                    }
+                }
+                this.saveState();
+                this.render();
+                return;
+            }
+        }
+    }
+
+    /**
+     * Updates a usage justification in a carryover instance.
+     * @param {string} benefitId - The benefit ID
+     * @param {number} instanceIndex - The carryover instance index
+     * @param {string} justificationId - The justification ID
+     * @param {Object} updates - Fields to update
+     */
+    handleUpdateCarryoverJustification(benefitId, instanceIndex, justificationId, updates) {
+        for (const c of this.cards) {
+            const b = c.findBenefit ? c.findBenefit(benefitId) : c.benefits.find(ben => ben.id === benefitId);
+            if (b && this._isCarryoverBenefit(b)) {
+                if (b.updateCarryoverInstanceJustification) {
+                    b.updateCarryoverInstanceJustification(instanceIndex, justificationId, updates);
+                } else {
+                    // Fallback for plain objects
+                    const instance = b.earnedInstances[instanceIndex];
+                    if (instance && instance.usageJustifications) {
+                        const j = instance.usageJustifications.find(just => just.id === justificationId);
+                        if (j) Object.assign(j, updates);
+                    }
+                }
+                this.saveState();
+                this.render();
+                return;
+            }
+        }
+    }
+
+    /**
+     * Confirms a carryover justification (marks it as confirmed).
+     * @param {string} benefitId - The benefit ID
+     * @param {number} instanceIndex - The carryover instance index
+     * @param {string} justificationId - The justification ID
+     */
+    handleConfirmCarryoverJustification(benefitId, instanceIndex, justificationId) {
+        this.handleUpdateCarryoverJustification(benefitId, instanceIndex, justificationId, { confirmed: true });
+    }
+
+    /**
+     * Adds a usage entry - increments used amount and creates a justification simultaneously.
+     * @param {string} benefitId - The benefit ID
+     * @param {number} amount - The amount to add
+     * @param {string} justification - The justification text
+     * @param {string|null} reminderDate - Optional reminder date
+     * @param {string|null} chargeDate - Optional charge date
+     */
+    handleAddUsageEntry(benefitId, amount, justification, reminderDate = null, chargeDate = null) {
+        for (const c of this.cards) {
+            const b = c.findBenefit ? c.findBenefit(benefitId) : c.benefits.find(ben => ben.id === benefitId);
+            if (b) {
+                // Increment used amount
+                const newUsed = (b.usedAmount || 0) + amount;
+                if (b.setUsedAmount) {
+                    b.setUsedAmount(newUsed);
+                } else {
+                    const clamped = Math.max(0, Math.min(newUsed, b.totalAmount));
+                    b.usedAmount = clamped;
+                }
+                
+                // Add justification
+                if (b.addUsageJustification) {
+                    b.addUsageJustification(amount, justification, reminderDate, chargeDate);
+                } else {
+                    if (!b.usageJustifications) b.usageJustifications = [];
+                    b.usageJustifications.push({
+                        id: `just-${Math.random().toString(36).substr(2, 9)}`,
+                        amount: amount,
+                        justification: justification,
+                        reminderDate: reminderDate,
+                        chargeDate: chargeDate,
+                        confirmed: false
+                    });
+                }
+                
+                this.saveState();
+                this.render();
+                return;
+            }
+        }
+    }
+
+    /**
+     * Adds a usage entry to a carryover instance - increments used amount and creates a justification.
+     * @param {string} benefitId - The benefit ID
+     * @param {number} instanceIndex - The carryover instance index
+     * @param {number} amount - The amount to add
+     * @param {string} justification - The justification text
+     * @param {string|null} reminderDate - Optional reminder date
+     * @param {string|null} chargeDate - Optional charge date
+     */
+    handleAddCarryoverUsageEntry(benefitId, instanceIndex, amount, justification, reminderDate = null, chargeDate = null) {
+        for (const c of this.cards) {
+            const b = c.findBenefit ? c.findBenefit(benefitId) : c.benefits.find(ben => ben.id === benefitId);
+            if (b && this._isCarryoverBenefit(b)) {
+                const instance = b.earnedInstances[instanceIndex];
+                if (instance) {
+                    // Increment used amount
+                    const newUsed = (instance.usedAmount || 0) + amount;
+                    const clamped = Math.max(0, Math.min(newUsed, b.totalAmount));
+                    instance.usedAmount = clamped;
+                    
+                    // Add justification
+                    if (!instance.usageJustifications) instance.usageJustifications = [];
+                    instance.usageJustifications.push({
+                        id: `just-${Math.random().toString(36).substr(2, 9)}`,
+                        amount: amount,
+                        justification: justification,
+                        reminderDate: reminderDate,
+                        chargeDate: chargeDate,
+                        confirmed: false
+                    });
+                }
+                
+                this.saveState();
+                this.render();
+                return;
+            }
+        }
     }
 }
 

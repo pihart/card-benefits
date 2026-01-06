@@ -1151,6 +1151,228 @@ runner.suite('Default Expiring Threshold', ({ test }) => {
     });
 });
 
+// ==================== USAGE JUSTIFICATIONS TESTS ====================
+runner.suite('Usage Justifications', ({ test }) => {
+    test('Add and retrieve justifications for regular benefit', () => {
+        const benefit = new Benefit({
+            id: 'test-benefit',
+            description: 'Travel Credit',
+            totalAmount: 300,
+            usedAmount: 0,
+            frequency: 'annual',
+            resetType: 'calendar'
+        });
+
+        // Add justification
+        const just1 = benefit.addUsageJustification(150, 'Trip to Spain', '2025-02-15', '2025-01-10');
+        
+        assertTrue(just1 !== null, 'Should return justification object');
+        assertEquals(benefit.usageJustifications.length, 1, 'Should have 1 justification');
+        assertEquals(benefit.usageJustifications[0].amount, 150, 'Amount should be 150');
+        assertEquals(benefit.usageJustifications[0].justification, 'Trip to Spain', 'Description should match');
+        assertEquals(benefit.usageJustifications[0].reminderDate, '2025-02-15', 'Reminder date should match');
+        assertEquals(benefit.usageJustifications[0].chargeDate, '2025-01-10', 'Charge date should match');
+        assertFalse(benefit.usageJustifications[0].confirmed, 'Should not be confirmed initially');
+
+        // Add second justification
+        benefit.addUsageJustification(90, 'Hotel in Mexico', null, '2025-01-20');
+        assertEquals(benefit.usageJustifications.length, 2, 'Should have 2 justifications');
+        
+        // Get total justified amount
+        const total = benefit.getTotalJustifiedAmount();
+        assertEquals(total, 240, 'Total justified should be 240');
+    });
+
+    test('Confirm justification', () => {
+        const benefit = new Benefit({
+            id: 'test-benefit',
+            description: 'Travel Credit',
+            totalAmount: 300,
+            frequency: 'annual'
+        });
+
+        const just = benefit.addUsageJustification(100, 'Flight', '2025-02-01', null);
+        assertFalse(just.confirmed, 'Should start unconfirmed');
+
+        benefit.confirmJustification(just.id);
+        assertTrue(benefit.usageJustifications[0].confirmed, 'Should be confirmed');
+    });
+
+    test('Remove justification', () => {
+        const benefit = new Benefit({
+            id: 'test-benefit',
+            description: 'Travel Credit',
+            totalAmount: 300,
+            frequency: 'annual'
+        });
+
+        const just1 = benefit.addUsageJustification(100, 'First', null, null);
+        const just2 = benefit.addUsageJustification(50, 'Second', null, null);
+        
+        assertEquals(benefit.usageJustifications.length, 2, 'Should have 2 justifications');
+        
+        const removed = benefit.removeUsageJustification(just1.id);
+        assertTrue(removed, 'Should return true on successful removal');
+        assertEquals(benefit.usageJustifications.length, 1, 'Should have 1 justification left');
+        assertEquals(benefit.usageJustifications[0].justification, 'Second', 'Remaining should be Second');
+    });
+
+    test('Get pending reminders', () => {
+        const today = new Date('2025-02-01');
+        const benefit = new Benefit({
+            id: 'test-benefit',
+            description: 'Travel Credit',
+            totalAmount: 300,
+            frequency: 'annual'
+        });
+
+        // Add justifications with different reminder dates
+        benefit.addUsageJustification(100, 'Past reminder', '2025-01-15', null); // Past
+        benefit.addUsageJustification(50, 'Today reminder', '2025-02-01', null); // Today
+        benefit.addUsageJustification(75, 'Future reminder', '2025-03-01', null); // Future
+        benefit.addUsageJustification(25, 'No reminder', null, null); // No reminder
+
+        const pending = benefit.getPendingReminders(today);
+        assertEquals(pending.length, 2, 'Should have 2 pending reminders (past and today)');
+        assertEquals(pending[0].amount, 100, 'First pending should be past reminder');
+        assertEquals(pending[1].amount, 50, 'Second pending should be today reminder');
+    });
+
+    test('Confirmed justifications are not in pending reminders', () => {
+        const today = new Date('2025-02-01');
+        const benefit = new Benefit({
+            id: 'test-benefit',
+            description: 'Travel Credit',
+            totalAmount: 300,
+            frequency: 'annual'
+        });
+
+        const just = benefit.addUsageJustification(100, 'Test', '2025-01-15', null);
+        
+        // Before confirmation
+        let pending = benefit.getPendingReminders(today);
+        assertEquals(pending.length, 1, 'Should have 1 pending reminder before confirmation');
+        
+        // After confirmation
+        benefit.confirmJustification(just.id);
+        pending = benefit.getPendingReminders(today);
+        assertEquals(pending.length, 0, 'Should have 0 pending reminders after confirmation');
+    });
+
+    test('Justifications persist through serialization', () => {
+        const benefit = new Benefit({
+            id: 'test-benefit',
+            description: 'Travel Credit',
+            totalAmount: 300,
+            frequency: 'annual'
+        });
+
+        benefit.addUsageJustification(150, 'Trip to Spain', '2025-02-15', '2025-01-10');
+        benefit.addUsageJustification(90, 'Hotel', null, '2025-01-20');
+
+        // Serialize
+        const json = benefit.toJSON();
+        assertTrue(Array.isArray(json.usageJustifications), 'Should serialize usageJustifications array');
+        assertEquals(json.usageJustifications.length, 2, 'Should have 2 justifications in JSON');
+
+        // Deserialize
+        const restored = Benefit.fromJSON(json);
+        assertEquals(restored.usageJustifications.length, 2, 'Should restore 2 justifications');
+        assertEquals(restored.usageJustifications[0].amount, 150, 'First amount should be restored');
+        assertEquals(restored.usageJustifications[0].chargeDate, '2025-01-10', 'Charge date should be restored');
+    });
+
+    test('Carryover instance justifications', () => {
+        const benefit = new Benefit({
+            id: 'test-benefit',
+            description: 'Carryover Credit',
+            totalAmount: 200,
+            isCarryover: true,
+            frequency: 'carryover',
+            earnedInstances: [
+                { earnedDate: '2024-01-15', usedAmount: 0 },
+                { earnedDate: '2025-01-20', usedAmount: 0 }
+            ]
+        });
+
+        // Add justification to first instance
+        const just1 = benefit.addCarryoverInstanceJustification(0, 100, 'First year usage', '2025-02-01', '2025-01-25');
+        assertTrue(just1 !== null, 'Should create justification for carryover instance');
+        
+        const instance1 = benefit.earnedInstances[0];
+        assertTrue(Array.isArray(instance1.usageJustifications), 'Instance should have justifications array');
+        assertEquals(instance1.usageJustifications.length, 1, 'Should have 1 justification');
+        assertEquals(instance1.usageJustifications[0].amount, 100, 'Amount should be 100');
+
+        // Add justification to second instance
+        benefit.addCarryoverInstanceJustification(1, 50, 'Second year usage', null, '2025-01-28');
+        const instance2 = benefit.earnedInstances[1];
+        assertEquals(instance2.usageJustifications.length, 1, 'Second instance should have 1 justification');
+        
+        // First instance should still have its justification
+        assertEquals(instance1.usageJustifications.length, 1, 'First instance should still have 1 justification');
+    });
+
+    test('Justifications preserved when benefit resets', () => {
+        const today = new Date('2025-01-01');
+        const benefit = new Benefit({
+            id: 'test-benefit',
+            description: 'Monthly Credit',
+            totalAmount: 100,
+            usedAmount: 80,
+            frequency: 'monthly',
+            resetType: 'calendar',
+            lastReset: '2024-12-01'
+        });
+
+        // Add justification with reminder date AFTER the next reset
+        benefit.addUsageJustification(50, 'Purchase 1', '2025-02-15', '2024-12-10');
+        benefit.addUsageJustification(30, 'Purchase 2', '2025-03-01', '2024-12-20');
+
+        assertEquals(benefit.usageJustifications.length, 2, 'Should have 2 justifications before reset');
+
+        // Reset the benefit (simulating what happens when benefit resets)
+        benefit.reset(today);
+        
+        // Justifications should still be there
+        assertEquals(benefit.usageJustifications.length, 2, 'Justifications should be preserved after reset');
+        assertEquals(benefit.usedAmount, 0, 'Used amount should be reset to 0');
+        
+        // Pending reminders should still work
+        const pending = benefit.getPendingReminders(today);
+        assertEquals(pending.length, 0, 'No reminders should be pending yet (all future dates)');
+        
+        // Check reminders are still pending in February
+        const future = new Date('2025-02-16');
+        const pendingFuture = benefit.getPendingReminders(future);
+        assertEquals(pendingFuture.length, 1, 'Should have 1 pending reminder in February');
+    });
+
+    test('Update justification details', () => {
+        const benefit = new Benefit({
+            id: 'test-benefit',
+            description: 'Travel Credit',
+            totalAmount: 300,
+            frequency: 'annual'
+        });
+
+        const just = benefit.addUsageJustification(100, 'Original description', '2025-02-01', '2025-01-15');
+        
+        // Update justification
+        const updated = benefit.updateUsageJustification(just.id, {
+            amount: 120,
+            justification: 'Updated description',
+            reminderDate: '2025-02-15'
+        });
+
+        assertTrue(updated, 'Should return true on successful update');
+        assertEquals(benefit.usageJustifications[0].amount, 120, 'Amount should be updated');
+        assertEquals(benefit.usageJustifications[0].justification, 'Updated description', 'Description should be updated');
+        assertEquals(benefit.usageJustifications[0].reminderDate, '2025-02-15', 'Reminder date should be updated');
+        assertEquals(benefit.usageJustifications[0].chargeDate, '2025-01-15', 'Charge date should remain unchanged');
+    });
+});
+
 // Run all tests
 runner.run()
     .then(exitCode => {

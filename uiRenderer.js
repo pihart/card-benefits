@@ -1143,19 +1143,99 @@ class UIRenderer {
             controlsDiv.appendChild(inputWrapper);
         }
 
+        // Quick Add Usage button
+        const quickAddBtn = document.createElement('button');
+        quickAddBtn.className = 'secondary-btn';
+        quickAddBtn.textContent = '⚡ Quick Add';
+        quickAddBtn.style.marginLeft = '10px';
+        quickAddBtn.onclick = (e) => {
+            e.stopPropagation();
+            this.showQuickAddInline(benefit, card, li, isCarryover ? activeInstances : null);
+        };
+        controlsDiv.appendChild(quickAddBtn);
+
+        // More Options dropdown
         const rightControls = document.createElement('div');
         rightControls.className = 'controls-right';
-        const editBtn = document.createElement('button');
-        editBtn.className = 'secondary-btn';
-        editBtn.textContent = 'Edit';
-        editBtn.onclick = () => this.renderBenefitEdit(benefit, card);
-        const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'danger-btn';
-        deleteBtn.textContent = 'Delete';
-        deleteBtn.onclick = () => this.app.handleDeleteBenefit(benefit.id);
+        rightControls.style.position = 'relative';
+        
+        const moreBtn = document.createElement('button');
+        moreBtn.className = 'secondary-btn';
+        moreBtn.textContent = '⋯ More';
+        
+        // Dropdown menu
+        const moreMenu = document.createElement('div');
+        moreMenu.className = 'more-options-menu';
+        moreMenu.style.display = 'none';
+        moreMenu.style.position = 'absolute';
+        moreMenu.style.right = '0';
+        moreMenu.style.top = '100%';
+        moreMenu.style.backgroundColor = 'white';
+        moreMenu.style.border = '1px solid #ddd';
+        moreMenu.style.borderRadius = '4px';
+        moreMenu.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+        moreMenu.style.zIndex = '1000';
+        moreMenu.style.minWidth = '150px';
+        moreMenu.style.marginTop = '4px';
+        
+        // Toggle menu on button click
+        moreBtn.onclick = (e) => {
+            e.stopPropagation();
+            
+            // Close all other open menus first
+            document.querySelectorAll('.more-options-menu').forEach(menu => {
+                if (menu !== moreMenu) {
+                    menu.style.display = 'none';
+                }
+            });
+            
+            // Toggle this menu
+            const isVisible = moreMenu.style.display === 'block';
+            moreMenu.style.display = isVisible ? 'none' : 'block';
+        };
 
-        rightControls.appendChild(editBtn);
-        rightControls.appendChild(deleteBtn);
+        const justifyOption = document.createElement('button');
+        justifyOption.className = 'more-option-item';
+        justifyOption.textContent = '📝 Justifications';
+        justifyOption.style.cssText = 'display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer;';
+        justifyOption.onmouseover = () => justifyOption.style.backgroundColor = '#f0f0f0';
+        justifyOption.onmouseout = () => justifyOption.style.backgroundColor = 'transparent';
+        justifyOption.onclick = (e) => {
+            e.stopPropagation();
+            moreMenu.style.display = 'none';
+            this.showJustificationsModal(benefit, card, isCarryover ? activeInstances : null);
+        };
+
+        const editOption = document.createElement('button');
+        editOption.className = 'more-option-item';
+        editOption.textContent = '✏️ Edit';
+        editOption.style.cssText = 'display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer;';
+        editOption.onmouseover = () => editOption.style.backgroundColor = '#f0f0f0';
+        editOption.onmouseout = () => editOption.style.backgroundColor = 'transparent';
+        editOption.onclick = (e) => {
+            e.stopPropagation();
+            moreMenu.style.display = 'none';
+            this.renderBenefitEdit(benefit, card);
+        };
+
+        const deleteOption = document.createElement('button');
+        deleteOption.className = 'more-option-item';
+        deleteOption.textContent = '🗑️ Delete';
+        deleteOption.style.cssText = 'display: block; width: 100%; padding: 8px 12px; border: none; background: none; text-align: left; cursor: pointer; color: #d32f2f;';
+        deleteOption.onmouseover = () => deleteOption.style.backgroundColor = '#ffebee';
+        deleteOption.onmouseout = () => deleteOption.style.backgroundColor = 'transparent';
+        deleteOption.onclick = (e) => {
+            e.stopPropagation();
+            moreMenu.style.display = 'none';
+            this.app.handleDeleteBenefit(benefit.id);
+        };
+
+        moreMenu.appendChild(justifyOption);
+        moreMenu.appendChild(editOption);
+        moreMenu.appendChild(deleteOption);
+
+        rightControls.appendChild(moreBtn);
+        rightControls.appendChild(moreMenu);
         controlsDiv.appendChild(rightControls);
 
         li.appendChild(detailsDiv);
@@ -1628,5 +1708,601 @@ class UIRenderer {
         document.getElementById(`cancel-${uId}`).onclick = () => {
             this.app.render();
         };
+    }
+
+    /**
+     * Shows a modal for managing usage justifications for a benefit.
+     * @param {Benefit} benefit - The benefit
+     * @param {Card} card - The parent card
+     * @param {Array|null} instances - For carryover benefits, the active instances
+     */
+    showJustificationsModal(benefit, card, instances = null) {
+        const isCarryover = this._isCarryoverBenefit(benefit);
+        
+        // Create modal overlay
+        const modalOverlay = document.createElement('div');
+        modalOverlay.className = 'modal-overlay';
+        modalOverlay.style.display = 'flex';
+        
+        // Create modal content
+        const modalContent = document.createElement('div');
+        modalContent.className = 'modal-content';
+        modalContent.style.maxWidth = '600px';
+        modalContent.style.maxHeight = '80vh';
+        modalContent.style.overflow = 'auto';
+        
+        const title = document.createElement('h2');
+        title.textContent = `Justifications: ${benefit.description}`;
+        modalContent.appendChild(title);
+        
+        // For carryover benefits, show tabs for each instance
+        if (isCarryover && instances && instances.length > 0) {
+            instances.forEach((instance, index) => {
+                const earnYear = CarryoverCycle.getEarnYear(instance.earnedDate);
+                const instanceSection = document.createElement('div');
+                instanceSection.style.marginBottom = '20px';
+                instanceSection.style.borderBottom = '1px solid #ddd';
+                instanceSection.style.paddingBottom = '15px';
+                
+                const instanceTitle = document.createElement('h3');
+                instanceTitle.textContent = `${earnYear} Credit`;
+                instanceTitle.style.fontSize = '1.1rem';
+                instanceTitle.style.marginBottom = '10px';
+                instanceSection.appendChild(instanceTitle);
+                
+                // Show existing justifications
+                const justifications = instance.usageJustifications || [];
+                const justList = this.createJustificationsList(benefit, justifications, true, index);
+                instanceSection.appendChild(justList);
+                
+                // Add justification button
+                const addBtn = document.createElement('button');
+                addBtn.className = 'secondary-btn';
+                addBtn.textContent = '+ Add Justification';
+                addBtn.style.marginTop = '10px';
+                addBtn.onclick = () => {
+                    const form = this.createJustificationForm(benefit, true, index, addBtn);
+                    instanceSection.insertBefore(form, addBtn);
+                    addBtn.style.display = 'none';
+                };
+                instanceSection.appendChild(addBtn);
+                
+                // Quick add usage button
+                const quickAddBtn = document.createElement('button');
+                quickAddBtn.className = 'secondary-btn';
+                quickAddBtn.textContent = '⚡ Quick Add Usage';
+                quickAddBtn.style.marginTop = '10px';
+                quickAddBtn.style.marginLeft = '10px';
+                quickAddBtn.onclick = () => {
+                    const form = this.createQuickUsageForm(benefit, true, index, quickAddBtn);
+                    instanceSection.insertBefore(form, addBtn);
+                    quickAddBtn.style.display = 'none';
+                };
+                instanceSection.appendChild(quickAddBtn);
+                
+                modalContent.appendChild(instanceSection);
+            });
+        } else {
+            // Regular benefit justifications
+            const justifications = benefit.usageJustifications || [];
+            const justList = this.createJustificationsList(benefit, justifications, false, null);
+            modalContent.appendChild(justList);
+            
+            // Add justification button
+            const addBtn = document.createElement('button');
+            addBtn.className = 'secondary-btn';
+            addBtn.textContent = '+ Add Justification';
+            addBtn.style.marginTop = '10px';
+            addBtn.onclick = () => {
+                const form = this.createJustificationForm(benefit, false, null, addBtn);
+                modalContent.insertBefore(form, addBtn);
+                addBtn.style.display = 'none';
+            };
+            modalContent.appendChild(addBtn);
+            
+            // Quick add usage button
+            const quickAddBtn = document.createElement('button');
+            quickAddBtn.className = 'secondary-btn';
+            quickAddBtn.textContent = '⚡ Quick Add Usage';
+            quickAddBtn.style.marginTop = '10px';
+            quickAddBtn.style.marginLeft = '10px';
+            quickAddBtn.onclick = () => {
+                const form = this.createQuickUsageForm(benefit, false, null, quickAddBtn);
+                modalContent.insertBefore(form, addBtn);
+                quickAddBtn.style.display = 'none';
+            };
+            modalContent.appendChild(quickAddBtn);
+        }
+        
+        // Summary info
+        const summary = document.createElement('div');
+        summary.style.marginTop = '20px';
+        summary.style.padding = '10px';
+        summary.style.backgroundColor = '#f5f5f5';
+        summary.style.borderRadius = '5px';
+        
+        let totalJustified = 0;
+        let totalUsed = 0;
+        
+        if (isCarryover && instances) {
+            instances.forEach(inst => {
+                totalUsed += inst.usedAmount || 0;
+                if (inst.usageJustifications) {
+                    totalJustified += inst.usageJustifications.reduce((sum, j) => sum + (j.amount || 0), 0);
+                }
+            });
+        } else {
+            totalUsed = benefit.usedAmount || 0;
+            if (benefit.usageJustifications) {
+                totalJustified = benefit.usageJustifications.reduce((sum, j) => sum + (j.amount || 0), 0);
+            }
+        }
+        
+        summary.innerHTML = `
+            <strong>Summary:</strong><br>
+            Total Used: $${totalUsed.toFixed(2)}<br>
+            Total Justified: $${totalJustified.toFixed(2)}<br>
+            Unjustified: $${(totalUsed - totalJustified).toFixed(2)}
+        `;
+        modalContent.appendChild(summary);
+        
+        // Close button
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = 'Close';
+        closeBtn.style.marginTop = '15px';
+        closeBtn.onclick = () => {
+            document.body.removeChild(modalOverlay);
+        };
+        modalContent.appendChild(closeBtn);
+        
+        modalOverlay.appendChild(modalContent);
+        document.body.appendChild(modalOverlay);
+        
+        // Close on overlay click
+        modalOverlay.onclick = (e) => {
+            if (e.target === modalOverlay) {
+                document.body.removeChild(modalOverlay);
+            }
+        };
+    }
+
+    /**
+     * Creates a list of justifications.
+     * @param {Benefit} benefit - The benefit
+     * @param {Array} justifications - Array of justification objects
+     * @param {boolean} isCarryover - Whether this is for a carryover instance
+     * @param {number|null} instanceIndex - Instance index for carryover
+     * @returns {HTMLElement}
+     */
+    createJustificationsList(benefit, justifications, isCarryover, instanceIndex) {
+        const container = document.createElement('div');
+        
+        if (justifications.length === 0) {
+            const emptyMsg = document.createElement('p');
+            emptyMsg.textContent = 'No justifications added yet.';
+            emptyMsg.style.color = '#999';
+            emptyMsg.style.fontStyle = 'italic';
+            container.appendChild(emptyMsg);
+            return container;
+        }
+        
+        const list = document.createElement('ul');
+        list.style.listStyle = 'none';
+        list.style.padding = '0';
+        
+        justifications.forEach(just => {
+            const li = document.createElement('li');
+            li.style.padding = '10px';
+            li.style.marginBottom = '8px';
+            li.style.border = '1px solid #ddd';
+            li.style.borderRadius = '5px';
+            li.style.backgroundColor = just.confirmed ? '#e8f5e9' : '#fff';
+            
+            const header = document.createElement('div');
+            header.style.display = 'flex';
+            header.style.justifyContent = 'space-between';
+            header.style.alignItems = 'center';
+            header.style.marginBottom = '5px';
+            
+            const amountSpan = document.createElement('span');
+            amountSpan.style.fontWeight = 'bold';
+            amountSpan.textContent = `$${(just.amount || 0).toFixed(2)}`;
+            header.appendChild(amountSpan);
+            
+            const badges = document.createElement('div');
+            badges.style.display = 'flex';
+            badges.style.gap = '5px';
+            
+            if (just.confirmed) {
+                const confirmedBadge = document.createElement('span');
+                confirmedBadge.textContent = '✅ Confirmed';
+                confirmedBadge.style.fontSize = '0.8rem';
+                confirmedBadge.style.color = '#4caf50';
+                badges.appendChild(confirmedBadge);
+            }
+            
+            if (just.reminderDate) {
+                const reminderBadge = document.createElement('span');
+                const reminderDate = new Date(just.reminderDate);
+                const isPast = reminderDate <= this.app.today && !just.confirmed;
+                reminderBadge.textContent = `🔔 ${reminderDate.toLocaleDateString()}`;
+                reminderBadge.style.fontSize = '0.8rem';
+                reminderBadge.style.color = isPast ? '#ff9800' : '#666';
+                if (isPast) reminderBadge.style.fontWeight = 'bold';
+                badges.appendChild(reminderBadge);
+            }
+            
+            if (just.chargeDate) {
+                const chargeBadge = document.createElement('span');
+                const chargeDate = new Date(just.chargeDate);
+                chargeBadge.textContent = `📅 ${chargeDate.toLocaleDateString()}`;
+                chargeBadge.style.fontSize = '0.8rem';
+                chargeBadge.style.color = '#2196f3';
+                badges.appendChild(chargeBadge);
+            }
+            
+            header.appendChild(badges);
+            li.appendChild(header);
+            
+            const textDiv = document.createElement('div');
+            textDiv.textContent = just.justification || '(No description)';
+            textDiv.style.marginBottom = '8px';
+            li.appendChild(textDiv);
+            
+            const actions = document.createElement('div');
+            actions.style.display = 'flex';
+            actions.style.gap = '5px';
+            
+            if (!just.confirmed) {
+                const confirmBtn = document.createElement('button');
+                confirmBtn.className = 'secondary-btn';
+                confirmBtn.textContent = 'Confirm';
+                confirmBtn.style.fontSize = '0.85rem';
+                confirmBtn.style.padding = '3px 8px';
+                confirmBtn.onclick = () => {
+                    if (isCarryover) {
+                        this.app.handleConfirmCarryoverJustification(benefit.id, instanceIndex, just.id);
+                    } else {
+                        this.app.handleConfirmJustification(benefit.id, just.id);
+                    }
+                    
+                    // Close and reopen modal to refresh
+                    const modalOverlay = confirmBtn.closest('.modal-overlay');
+                    if (modalOverlay) {
+                        document.body.removeChild(modalOverlay);
+                        const card = this.app.cards.find(c => c.findBenefit(benefit.id));
+                        if (card) {
+                            const updatedBenefit = card.findBenefit(benefit.id);
+                            const activeInstances = isCarryover ? this.app.getActiveCarryoverInstances(updatedBenefit) : null;
+                            this.showJustificationsModal(updatedBenefit, card, activeInstances);
+                        }
+                    }
+                };
+                actions.appendChild(confirmBtn);
+            }
+            
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'danger-btn';
+            deleteBtn.textContent = 'Delete';
+            deleteBtn.style.fontSize = '0.85rem';
+            deleteBtn.style.padding = '3px 8px';
+            deleteBtn.onclick = () => {
+                if (confirm('Delete this justification?')) {
+                    if (isCarryover) {
+                        this.app.handleRemoveCarryoverJustification(benefit.id, instanceIndex, just.id);
+                    } else {
+                        this.app.handleRemoveJustification(benefit.id, just.id);
+                    }
+                    
+                    // Close and reopen modal to refresh
+                    const modalOverlay = deleteBtn.closest('.modal-overlay');
+                    if (modalOverlay) {
+                        document.body.removeChild(modalOverlay);
+                        const card = this.app.cards.find(c => c.findBenefit(benefit.id));
+                        if (card) {
+                            const updatedBenefit = card.findBenefit(benefit.id);
+                            const activeInstances = isCarryover ? this.app.getActiveCarryoverInstances(updatedBenefit) : null;
+                            this.showJustificationsModal(updatedBenefit, card, activeInstances);
+                        }
+                    }
+                }
+            };
+            actions.appendChild(deleteBtn);
+            
+            li.appendChild(actions);
+            list.appendChild(li);
+        });
+        
+        container.appendChild(list);
+        return container;
+    }
+
+    /**
+     * Creates a form for adding a new justification.
+     * @param {Benefit} benefit - The benefit
+     * @param {boolean} isCarryover - Whether this is for a carryover instance
+     * @param {number|null} instanceIndex - Instance index for carryover
+     * @param {HTMLElement} addBtn - Reference to the add button to re-show on cancel
+     * @returns {HTMLElement}
+     */
+    createJustificationForm(benefit, isCarryover, instanceIndex, addBtn) {
+        const form = document.createElement('form');
+        form.style.padding = '15px';
+        form.style.backgroundColor = '#f9f9f9';
+        form.style.borderRadius = '5px';
+        form.style.marginBottom = '15px';
+        
+        form.innerHTML = `
+            <h4 style="margin-top: 0;">Add Justification</h4>
+            <div style="margin-bottom: 10px;">
+                <label style="display: block; margin-bottom: 5px;">Amount</label>
+                <input type="number" name="amount" placeholder="0.00" min="0.01" step="0.01" required style="width: 100%; padding: 8px;">
+            </div>
+            <div style="margin-bottom: 10px;">
+                <label style="display: block; margin-bottom: 5px;">Description</label>
+                <textarea name="justification" placeholder="E.g., Trip to Spain" required style="width: 100%; padding: 8px; min-height: 60px;"></textarea>
+            </div>
+            <div style="margin-bottom: 10px;">
+                <label style="display: block; margin-bottom: 5px;">Charge Date (optional)</label>
+                <input type="date" name="chargeDate" style="width: 100%; padding: 8px;">
+                <small style="color: #666;">When did this charge occur?</small>
+            </div>
+            <div style="margin-bottom: 10px;">
+                <label style="display: block; margin-bottom: 5px;">Reminder Date (optional)</label>
+                <input type="date" name="reminderDate" style="width: 100%; padding: 8px;">
+                <small style="color: #666;">Set a reminder to confirm this charge posted</small>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button type="submit">Add</button>
+                <button type="button" class="secondary-btn cancel-btn">Cancel</button>
+            </div>
+        `;
+        
+        form.onsubmit = (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const amount = parseFloat(formData.get('amount'));
+            const justification = formData.get('justification');
+            const reminderDate = formData.get('reminderDate') || null;
+            const chargeDate = formData.get('chargeDate') || null;
+            
+            if (isCarryover) {
+                this.app.handleAddCarryoverJustification(benefit.id, instanceIndex, amount, justification, reminderDate, chargeDate);
+            } else {
+                this.app.handleAddJustification(benefit.id, amount, justification, reminderDate, chargeDate);
+            }
+            
+            // Close and reopen modal to refresh content
+            const modalOverlay = form.closest('.modal-overlay');
+            if (modalOverlay) {
+                document.body.removeChild(modalOverlay);
+                // Reopen the modal with updated data
+                const card = this.app.cards.find(c => c.findBenefit(benefit.id));
+                if (card) {
+                    const updatedBenefit = card.findBenefit(benefit.id);
+                    const activeInstances = isCarryover ? this.app.getActiveCarryoverInstances(updatedBenefit) : null;
+                    this.showJustificationsModal(updatedBenefit, card, activeInstances);
+                }
+            }
+        };
+        
+        form.querySelector('.cancel-btn').onclick = () => {
+            form.remove();
+            // Re-show the add button using the passed reference
+            if (addBtn) {
+                addBtn.style.display = 'block';
+            }
+        };
+        
+        return form;
+    }
+
+    /**
+     * Creates a form for quickly adding a usage entry (increments used and adds justification).
+     * @param {Benefit} benefit - The benefit
+     * @param {boolean} isCarryover - Whether this is for a carryover instance
+     * @param {number|null} instanceIndex - Instance index for carryover
+     * @param {HTMLElement} quickAddBtn - Reference to the quick add button to re-show on cancel
+     * @returns {HTMLElement}
+     */
+    createQuickUsageForm(benefit, isCarryover, instanceIndex, quickAddBtn) {
+        const form = document.createElement('form');
+        form.style.padding = '15px';
+        form.style.backgroundColor = '#e3f2fd';
+        form.style.borderRadius = '5px';
+        form.style.marginBottom = '15px';
+        form.style.border = '2px solid #2196f3';
+        
+        form.innerHTML = `
+            <h4 style="margin-top: 0; color: #1976d2;">⚡ Quick Add Usage</h4>
+            <p style="margin: 0 0 10px 0; font-size: 0.9rem; color: #666;">This will increment the used amount and add a justification</p>
+            <div style="margin-bottom: 10px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Amount</label>
+                <input type="number" name="amount" placeholder="0.00" min="0.01" step="0.01" required style="width: 100%; padding: 8px;">
+            </div>
+            <div style="margin-bottom: 10px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Description</label>
+                <textarea name="justification" placeholder="E.g., Trip to Spain" required style="width: 100%; padding: 8px; min-height: 60px;"></textarea>
+            </div>
+            <div style="margin-bottom: 10px;">
+                <label style="display: block; margin-bottom: 5px;">Charge Date (optional)</label>
+                <input type="date" name="chargeDate" style="width: 100%; padding: 8px;">
+                <small style="color: #666;">When did this charge occur?</small>
+            </div>
+            <div style="margin-bottom: 10px;">
+                <label style="display: block; margin-bottom: 5px;">Reminder Date (optional)</label>
+                <input type="date" name="reminderDate" style="width: 100%; padding: 8px;">
+                <small style="color: #666;">Set a reminder to confirm this charge posted</small>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button type="submit" style="background-color: #2196f3;">Add & Increment Used</button>
+                <button type="button" class="secondary-btn cancel-btn">Cancel</button>
+            </div>
+        `;
+        
+        form.onsubmit = (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const amount = parseFloat(formData.get('amount'));
+            const justification = formData.get('justification');
+            const reminderDate = formData.get('reminderDate') || null;
+            const chargeDate = formData.get('chargeDate') || null;
+            
+            if (isCarryover) {
+                this.app.handleAddCarryoverUsageEntry(benefit.id, instanceIndex, amount, justification, reminderDate, chargeDate);
+            } else {
+                this.app.handleAddUsageEntry(benefit.id, amount, justification, reminderDate, chargeDate);
+            }
+            
+            // Close and reopen modal to refresh content
+            const modalOverlay = form.closest('.modal-overlay');
+            if (modalOverlay) {
+                document.body.removeChild(modalOverlay);
+                // Reopen the modal with updated data
+                const card = this.app.cards.find(c => c.findBenefit(benefit.id));
+                if (card) {
+                    const updatedBenefit = card.findBenefit(benefit.id);
+                    const activeInstances = isCarryover ? this.app.getActiveCarryoverInstances(updatedBenefit) : null;
+                    this.showJustificationsModal(updatedBenefit, card, activeInstances);
+                }
+            }
+        };
+        
+        form.querySelector('.cancel-btn').onclick = () => {
+            form.remove();
+            // Re-show the quick add button using the passed reference
+            if (quickAddBtn) {
+                quickAddBtn.style.display = 'inline-block';
+            }
+        };
+        
+        return form;
+    }
+
+    /**
+     * Shows the quick add usage form inline on the benefit item.
+     * @param {Benefit} benefit - The benefit
+     * @param {Card} card - The parent card
+     * @param {HTMLElement} benefitElement - The benefit list item element
+     * @param {Array|null} instances - For carryover benefits, the active instances
+     */
+    showQuickAddInline(benefit, card, benefitElement, instances = null) {
+        const isCarryover = this._isCarryoverBenefit(benefit);
+        
+        // Check if form already exists
+        const existingForm = benefitElement.querySelector('.inline-quick-add-form');
+        if (existingForm) {
+            existingForm.remove();
+            return;
+        }
+        
+        const formContainer = document.createElement('div');
+        formContainer.className = 'inline-quick-add-form';
+        formContainer.style.cssText = 'padding: 15px; margin-top: 10px; background-color: #e3f2fd; border-radius: 5px; border: 2px solid #2196f3;';
+        
+        // For carryover benefits, show instance selector
+        if (isCarryover && instances && instances.length > 0) {
+            const instanceSelector = document.createElement('div');
+            instanceSelector.style.marginBottom = '10px';
+            
+            const label = document.createElement('label');
+            label.textContent = 'Select Credit Year: ';
+            label.style.fontWeight = 'bold';
+            
+            const select = document.createElement('select');
+            select.style.padding = '5px';
+            select.style.marginLeft = '8px';
+            
+            instances.forEach((instance, index) => {
+                const earnYear = CarryoverCycle.getEarnYear(instance.earnedDate);
+                const option = document.createElement('option');
+                option.value = index;
+                option.textContent = `${earnYear} Credit`;
+                select.appendChild(option);
+            });
+            
+            instanceSelector.appendChild(label);
+            instanceSelector.appendChild(select);
+            formContainer.appendChild(instanceSelector);
+            formContainer.instanceSelect = select; // Store reference
+        }
+        
+        formContainer.innerHTML += `
+            <h4 style="margin-top: 0; color: #1976d2;">⚡ Quick Add Usage</h4>
+            <div style="display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 100px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold; font-size: 0.9rem;">Amount</label>
+                    <input type="number" class="quick-add-amount" placeholder="0.00" min="0.01" step="0.01" required style="width: 100%; padding: 6px;">
+                </div>
+                <div style="flex: 2; min-width: 150px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold; font-size: 0.9rem;">Description</label>
+                    <input type="text" class="quick-add-desc" placeholder="E.g., Trip to Spain" required style="width: 100%; padding: 6px;">
+                </div>
+                <div style="flex: 1; min-width: 120px;">
+                    <label style="display: block; margin-bottom: 5px; font-size: 0.9rem;">Charge Date</label>
+                    <input type="date" class="quick-add-charge-date" style="width: 100%; padding: 6px;">
+                </div>
+                <div style="flex: 1; min-width: 120px;">
+                    <label style="display: block; margin-bottom: 5px; font-size: 0.9rem;">Reminder</label>
+                    <input type="date" class="quick-add-reminder" style="width: 100%; padding: 6px;">
+                </div>
+                <div style="display: flex; gap: 5px;">
+                    <button class="quick-add-submit" style="background-color: #2196f3; color: white; padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer;">Add</button>
+                    <button class="quick-add-cancel" style="background-color: #666; color: white; padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer;">Cancel</button>
+                </div>
+            </div>
+        `;
+        
+        // Get references after innerHTML is set
+        const amountInput = formContainer.querySelector('.quick-add-amount');
+        const descInput = formContainer.querySelector('.quick-add-desc');
+        const chargeDateInput = formContainer.querySelector('.quick-add-charge-date');
+        const reminderInput = formContainer.querySelector('.quick-add-reminder');
+        const submitBtn = formContainer.querySelector('.quick-add-submit');
+        const cancelBtn = formContainer.querySelector('.quick-add-cancel');
+        
+        // Set default dates
+        const today = new Date(this.app.today);
+        const todayStr = today.toISOString().split('T')[0];
+        chargeDateInput.value = todayStr;
+        
+        // Set reminder to charge date + 3 days if it hasn't passed yet
+        const reminderDate = new Date(today);
+        reminderDate.setDate(reminderDate.getDate() + 3);
+        if (reminderDate > today) {
+            reminderInput.value = reminderDate.toISOString().split('T')[0];
+        }
+        // Otherwise leave blank (default)
+        
+        submitBtn.onclick = (e) => {
+            e.stopPropagation();
+            const amount = parseFloat(amountInput.value);
+            const description = descInput.value.trim();
+            
+            if (!amount || amount <= 0 || !description) {
+                alert('Please enter a valid amount and description');
+                return;
+            }
+            
+            const chargeDate = chargeDateInput.value || null;
+            const reminderDate = reminderInput.value || null;
+            
+            if (isCarryover && instances && instances.length > 0) {
+                const instanceIndex = parseInt(formContainer.instanceSelect.value);
+                this.app.handleAddCarryoverUsageEntry(benefit.id, instanceIndex, amount, description, reminderDate, chargeDate);
+            } else {
+                this.app.handleAddUsageEntry(benefit.id, amount, description, reminderDate, chargeDate);
+            }
+            
+            formContainer.remove();
+        };
+        
+        cancelBtn.onclick = (e) => {
+            e.stopPropagation();
+            formContainer.remove();
+        };
+        
+        benefitElement.appendChild(formContainer);
+        amountInput.focus();
     }
 }
