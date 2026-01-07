@@ -6,7 +6,7 @@
 class ExpiryCycle {
     /**
      * @param {Object} config
-     * @param {string} config.frequency - 'monthly', 'quarterly', 'biannual', 'annual', 'every-4-years', 'one-time', or 'carryover'
+     * @param {string} config.frequency - 'monthly', 'quarterly', 'biannual', 'annual', 'yearly', 'every-4-years', 'one-time', or 'carryover'
      * @param {string|null} config.resetType - 'calendar' or 'anniversary' (null for one-time/carryover)
      * @param {Date|string|null} config.lastReset - Last reset date
      * @param {Date|string|null} config.anniversaryDate - Card anniversary date (for anniversary-based resets)
@@ -73,7 +73,7 @@ class ExpiryCycle {
             return null;
         }
 
-        // Cap iteration to avoid infinite loops with malformed data (~27 years of daily steps)
+        // Cap iteration to 10k steps (~27 years if stepping once per day) to avoid infinite loops with malformed data
         const SAFETY_LIMIT = 10000;
         let lastReset = new Date(this.lastReset);
         lastReset.setHours(0, 0, 0, 0);
