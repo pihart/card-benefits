@@ -73,8 +73,8 @@ class ExpiryCycle {
             return null;
         }
 
-        // Cap iteration to 10k steps to avoid infinite loops with malformed data
-        const SAFETY_LIMIT = 10000;
+        // Cap iteration to a reasonable number of steps to avoid infinite loops with malformed data
+        const SAFETY_LIMIT = 500;
         let lastReset = new Date(this.lastReset);
         lastReset.setHours(0, 0, 0, 0);
 
@@ -95,6 +95,7 @@ class ExpiryCycle {
         }
 
         if (safety >= SAFETY_LIMIT && nextReset <= referenceDate && nextReset <= lastReset) {
+            console.warn('ExpiryCycle: safety limit reached while calculating next reset; using fallback date.');
             // As a last resort, advance a day beyond the reference date to guarantee forward progress
             const fallback = new Date(referenceDate);
             fallback.setDate(fallback.getDate() + 1);
