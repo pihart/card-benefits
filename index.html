@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="css/components/expiring-soon.css">
     <link rel="stylesheet" href="css/components/cards.css">
     <link rel="stylesheet" href="css/components/benefits.css">
+    <link rel="stylesheet" href="css/components/ai.css">
 </head>
 <body>
 
@@ -101,7 +102,7 @@
             </div>
         </div>
 
-        <!-- Settings/Storage Modal -->
+         <!-- Settings/Storage Modal -->
         <div id="settings-modal" class="modal-overlay">
             <div class="modal-content">
                 <h2>Settings</h2>
@@ -151,6 +152,13 @@
                         800ms).</small>
                 </div>
 
+                <h3 style="margin-top: 20px; margin-bottom: 10px; font-size: 1rem; color: #555;">AI Assistant</h3>
+                <p id="ai-settings-status" style="margin: 0 0 8px 0;">Checking on-device model availability...</p>
+                <div id="ai-download-progress" class="ai-download-progress" style="display: none;">
+                    <div id="ai-download-bar"></div>
+                </div>
+                <small id="ai-download-note" style="color: #666;">If a local model is required, it will download in the background and you can track progress here.</small>
+
                 <div class="modal-actions" style="justify-content: space-between;">
                     <button id="use-local-storage-btn" class="secondary-btn">Reset to Local Storage</button>
                     <div style="display: flex; gap: 10px;">
@@ -160,6 +168,34 @@
                 </div>
             </div>
         </div>
+
+        <section id="ai-assistant" class="ai-assistant">
+            <div class="ai-assistant-header">
+                <div>
+                    <h2 style="margin: 0;">AI Assistant</h2>
+                    <p id="ai-availability" class="ai-status">Checking model...</p>
+                </div>
+                <div class="ai-summary-controls">
+                    <button id="ai-refresh-summary" class="secondary-btn" type="button">Refresh Summary</button>
+                </div>
+            </div>
+
+            <div class="ai-summary-panel">
+                <div class="ai-summary-title">AI Summary &amp; Priorities</div>
+                <div id="ai-summary" class="ai-summary-body">Model loading...</div>
+            </div>
+
+            <div class="ai-chat">
+                <div class="ai-messages-wrapper">
+                    <div id="ai-messages" class="ai-messages"></div>
+                </div>
+                <div id="ai-intent" class="ai-intent-label"></div>
+                <form id="ai-chat-form" class="ai-chat-form">
+                    <input type="text" id="ai-input" placeholder="Ask a question or request an update (e.g., mark airline credits as used)" required>
+                    <button type="submit">Send</button>
+                </form>
+            </div>
+        </section>
 
     </main>
 
@@ -176,6 +212,8 @@
 <script src="models/Benefit.js"></script>
 <script src="models/Card.js"></script>
 <script src="dateUtils.js"></script>
+<script src="dataSchema.js"></script>
+<script src="aiAssistant.js"></script>
 <script src="uiRenderer.js"></script>
 <script src="app.js"></script>
 </body>

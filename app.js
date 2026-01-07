@@ -17,6 +17,7 @@ class BenefitTrackerApp {
         this.collapseSections = false; // Setting to group fully utilized/ignored items into sections
         this.hideMonthlyExpiring = false; // Setting to hide monthly benefits from Expiring Soon
         this.userSelectedThreshold = false; // Track if user manually selected a threshold
+        this.aiAssistant = null;
 
         // Concurrency Control
         this.pollAbortController = null;
@@ -163,6 +164,10 @@ class BenefitTrackerApp {
         this.expiringDaysSelect.value = defaultThreshold.toString();
 
         this.initLiveSync();
+
+        if (typeof AIAssistant !== 'undefined' && document.getElementById('ai-assistant')) {
+            this.aiAssistant = new AIAssistant(this, globalThis.DATA_SCHEMA);
+        }
 
         // Check for resets
         this.pendingResets = this.checkAndResetBenefits();
@@ -966,6 +971,9 @@ class BenefitTrackerApp {
         });
 
         this.initSortables();
+        if (this.aiAssistant && this.aiAssistant.refreshSummary) {
+            this.aiAssistant.refreshSummary();
+        }
     }
 
     // ... (Handlers same as before) ...
