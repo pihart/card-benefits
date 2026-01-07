@@ -73,7 +73,7 @@ class ExpiryCycle {
             return null;
         }
 
-        // Cap iteration to 10k steps (~27 years if stepping once per day) to avoid infinite loops with malformed data
+        // Cap iteration to 10k steps to avoid infinite loops with malformed data
         const SAFETY_LIMIT = 10000;
         let lastReset = new Date(this.lastReset);
         lastReset.setHours(0, 0, 0, 0);
@@ -82,7 +82,7 @@ class ExpiryCycle {
             ? this._calculateCalendarReset(lastReset)
             : this._calculateAnniversaryReset(lastReset);
 
-        // Advance safely if the computed reset isn't ahead of the last reset
+        // Advance safely if the computed reset isn't ahead of the last reset (e.g., missing anniversary data)
         let safety = 0;
         while (nextReset <= referenceDate && nextReset <= lastReset && safety < SAFETY_LIMIT) {
             const tempLastReset = new Date(nextReset.getTime());
