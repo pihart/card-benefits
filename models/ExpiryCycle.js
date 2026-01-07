@@ -75,32 +75,29 @@ class ExpiryCycle {
 
         // Cap iteration to a reasonable number of steps to avoid infinite loops with malformed data
         const SAFETY_LIMIT = 500;
-        let lastReset = new Date(this.lastReset);
-        lastReset.setHours(0, 0, 0, 0);
+        const originalLastReset = new Date(this.lastReset);
+        originalLastReset.setHours(0, 0, 0, 0);
 
+        let currentReset = new Date(originalLastReset);
         let nextReset = this.resetType === 'calendar'
-            ? this._calculateCalendarReset(lastReset)
-            : this._calculateAnniversaryReset(lastReset);
+            ? this._calculateCalendarReset(currentReset)
+            : this._calculateAnniversaryReset(currentReset);
 
-        // Advance safely if the computed reset isn't ahead of the last reset (e.g., missing anniversary data)
+        // Advance safely if the computed reset isn't advancing beyond the last reset
         let safety = 0;
-        while (nextReset <= referenceDate && safety < SAFETY_LIMIT) {
-            if (nextReset > lastReset) break;
-
-            const tempLastReset = new Date(nextReset.getTime());
-            tempLastReset.setDate(tempLastReset.getDate() + 1);
-            lastReset = tempLastReset;
+        while (nextReset <= referenceDate && nextReset <= currentReset && safety < SAFETY_LIMIT) {
+            currentReset.setDate(currentReset.getDate() + 1);
             nextReset = this.resetType === 'calendar'
-                ? this._calculateCalendarReset(lastReset)
-                : this._calculateAnniversaryReset(lastReset);
+                ? this._calculateCalendarReset(currentReset)
+                : this._calculateAnniversaryReset(currentReset);
             safety++;
         }
 
-        if (safety >= SAFETY_LIMIT && nextReset <= referenceDate) {
+        if (safety >= SAFETY_LIMIT && nextReset <= referenceDate && nextReset <= currentReset) {
             console.warn('ExpiryCycle: safety limit reached while calculating next reset; using fallback date.', {
                 frequency: this.frequency,
                 resetType: this.resetType,
-                lastReset: this.lastReset,
+                lastReset: originalLastReset.toISOString(),
                 referenceDate: referenceDate.toISOString()
             });
             // As a last resort, advance a day beyond the reference date to guarantee forward progress
