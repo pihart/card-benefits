@@ -42,7 +42,7 @@ class AIAssistant {
     }
 
     availabilitySupported() {
-        return typeof window !== 'undefined' && typeof LanguageModel !== 'undefined';
+        return typeof window !== 'undefined' && typeof LanguageModel !== 'undefined' && typeof LanguageModel.create === 'function';
     }
 
     setStatus(text) {
@@ -72,28 +72,9 @@ class AIAssistant {
             this.refreshSummary();
             return;
         }
-        try {
-            const caps = await LanguageModel.capabilities();
-            if (caps.available === 'readily') {
-                this.modelReady = true;
-                this.setStatus('Model ready');
-                await this.ensureSession();
-                this.enableChat();
-                this.refreshSummary();
-            } else if (caps.available === 'after-download') {
-                this.setStatus('Downloading model in background...');
-                this.disableChat();
-                this.startDownload();
-            } else {
-                this.setStatus('Model unavailable');
-                this.disableChat();
-                this.refreshSummary();
-            }
-        } catch (err) {
-            this.setStatus(`AI check failed: ${err.message}`);
-            this.disableChat();
-            this.refreshSummary();
-        }
+        this.setStatus('Preparing model...');
+        this.disableChat();
+        await this.startDownload();
     }
 
     baseSystemPrompt() {
@@ -122,7 +103,10 @@ class AIAssistant {
             this.setStatus('Model ready');
             this.refreshSummary();
         } catch (err) {
-            this.setStatus(`AI download failed: ${err.message}`);
+            this.session = null;
+            this.modelReady = false;
+            this.setStatus(`AI unavailable: ${err.message}`);
+            this.disableChat();
         } finally {
             if (this.downloadTimer) clearInterval(this.downloadTimer);
         }
