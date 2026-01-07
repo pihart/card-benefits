@@ -166,6 +166,18 @@ runner.suite('Expiry Types - Calendar Reset', ({ test }) => {
         assertFalse(cycle.isExpired(new Date('2024-01-31')), 'Should not be expired on Jan 31');
     });
 
+    test('Monthly calendar reset advances across years', () => {
+        const lastReset = new Date('2023-01-15');
+        const cycle = new ExpiryCycle({
+            frequency: 'monthly',
+            resetType: 'calendar',
+            lastReset: lastReset.toISOString()
+        });
+
+        const nextReset = cycle.calculateNextResetDate(new Date('2024-06-15'));
+        assertDateEquals(nextReset, new Date('2024-07-01'), 'Next reset should be the first of the following month');
+    });
+
     test('Quarterly calendar reset', () => {
         const lastReset = new Date('2024-01-15');
         const cycle = new ExpiryCycle({
@@ -957,7 +969,7 @@ runner.suite('Default Expiring Threshold', ({ test }) => {
             frequency: 'annual',
             resetType: 'anniversary',
             lastReset: '2024-01-15'
-        });
+        }, card.anniversaryDate);
         
         // Partially used benefit
         const partiallyUsedBenefit = new Benefit({
@@ -968,7 +980,7 @@ runner.suite('Default Expiring Threshold', ({ test }) => {
             frequency: 'annual',
             resetType: 'anniversary',
             lastReset: '2024-01-15'
-        });
+        }, card.anniversaryDate);
         
         card.benefits.push(fullyUsedBenefit);
         card.benefits.push(partiallyUsedBenefit);
