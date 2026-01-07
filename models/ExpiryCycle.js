@@ -85,7 +85,11 @@ class ExpiryCycle {
 
         // Advance safely if the computed reset isn't advancing beyond the last reset
         let safety = 0;
-        while (nextReset <= referenceDate && nextReset <= currentReset && safety < SAFETY_LIMIT) {
+        while (nextReset <= referenceDate && safety < SAFETY_LIMIT) {
+            if (nextReset > currentReset) {
+                break;
+            }
+
             currentReset.setDate(currentReset.getDate() + 1);
             nextReset = this.resetType === 'calendar'
                 ? this._calculateCalendarReset(currentReset)
@@ -93,7 +97,7 @@ class ExpiryCycle {
             safety++;
         }
 
-        if (safety >= SAFETY_LIMIT && nextReset <= referenceDate && nextReset <= currentReset) {
+        if (safety >= SAFETY_LIMIT) {
             console.warn('ExpiryCycle: safety limit reached while calculating next reset; using fallback date.', {
                 frequency: this.frequency,
                 resetType: this.resetType,
