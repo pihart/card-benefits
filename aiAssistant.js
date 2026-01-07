@@ -147,7 +147,7 @@ class AIAssistant {
                     'Return only one word: modification or question.',
                     `User text: ${text}`
                 ].join('\n');
-                const aiIntent = await this.session.prompt(intentPrompt);
+                const aiIntent = await this.promptModel(intentPrompt, 'intent');
                 const normalized = (aiIntent || '').toString().trim().toLowerCase();
                 if (normalized.startsWith('modification')) return 'modification';
                 if (normalized.startsWith('question')) return 'question';
@@ -225,20 +225,26 @@ class AIAssistant {
             'Keep it concise and actionable.'
         ].join('\n');
 
-        const aiAnswer = await this.promptModel(prompt);
+        const aiAnswer = await this.promptModel(prompt, 'summary');
         this.summaryEl.textContent = aiAnswer || this.buildFallbackSummary();
     }
 
-    async promptModel(prompt) {
+    async promptModel(prompt, modelType = 'general', responseConstraint = undefined) {
         if (!this.modelReady) return null;
         await this.ensureSession();
         if (!this.session || !this.session.prompt) return null;
         try {
-            const result = await this.session.prompt(prompt);
-            console.log('[AI][prompt]', { promptSnippet: prompt.slice(0, 200), responseSnippet: typeof result === 'string' ? result.slice(0, 200) : result });
+            console.log('[AI][prompt][start]', { modelType, promptSnippet: prompt.slice(0, 200) });
+            const result = await this.session.prompt({
+                prompt,
+                responseConstraint
+            });
+            const responseSnippet = typeof result === 'string' ? result.slice(0, 200) : result;
+            console.log('[AI][prompt][done]', { modelType, responseSnippet });
             return result;
         } catch (err) {
             this.setStatus(`AI prompt failed: ${err.message}`);
+            console.log('[AI][prompt][error]', { modelType, error: err });
             return null;
         }
     }
@@ -297,7 +303,7 @@ class AIAssistant {
             'Return ONLY the full updated data as JSON matching the schema. Do not include any extra text.'
         ].join('\n');
 
-        const aiResult = await this.promptModel(modifyPrompt);
+        const aiResult = await this.promptModel(modifyPrompt, 'data', this.schema ? { type: 'json', schema: this.schema } : undefined);
         let proposedData = null;
         try {
             proposedData = JSON.parse(aiResult);
@@ -339,7 +345,7 @@ class AIAssistant {
                 'Updated data:',
                 JSON.stringify(proposedData)
             ].join('\n');
-            verification = await this.promptModel(verifyPrompt);
+            verification = await this.promptModel(verifyPrompt, 'verification');
         } catch (e) {
             console.log('[AI][verify] failed', e);
         }
@@ -351,7 +357,8 @@ class AIAssistant {
         console.log('[AI][request][question]', { text: userText });
         const context = JSON.stringify(this.buildContextSnapshot());
         const modelResponse = await this.promptModel(
-            `Answer the user's question about card benefits. Include card/benefit names as references.\nData: ${context}\nQuestion: ${userText}`
+            `Answer the user's question about card benefits. Include card/benefit names as references.\nData: ${context}\nQuestion: ${userText}`,
+            'qa'
         );
         if (modelResponse) return modelResponse;
         return `Based on current data: ${this.buildFallbackSummary()}`;
