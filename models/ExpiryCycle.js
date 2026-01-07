@@ -73,6 +73,7 @@ class ExpiryCycle {
             return null;
         }
 
+        const SAFETY_LIMIT = 10000;
         let lastReset = new Date(this.lastReset);
         lastReset.setHours(0, 0, 0, 0);
 
@@ -82,7 +83,7 @@ class ExpiryCycle {
 
         // Advance safely if the computed reset isn't ahead of the last reset
         let safety = 0;
-        while (nextReset <= referenceDate && nextReset <= lastReset && safety < 10000) {
+        while (nextReset <= referenceDate && nextReset <= lastReset && safety < SAFETY_LIMIT) {
             const tempLastReset = new Date(nextReset.getTime());
             tempLastReset.setDate(tempLastReset.getDate() + 1);
             lastReset = tempLastReset;
@@ -90,6 +91,12 @@ class ExpiryCycle {
                 ? this._calculateCalendarReset(lastReset)
                 : this._calculateAnniversaryReset(lastReset);
             safety++;
+        }
+
+        if (safety >= SAFETY_LIMIT && nextReset <= referenceDate && nextReset <= lastReset) {
+            const fallback = new Date(referenceDate);
+            fallback.setDate(fallback.getDate() + 1);
+            return fallback;
         }
 
         return nextReset;
