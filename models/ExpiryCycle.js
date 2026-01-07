@@ -73,28 +73,24 @@ class ExpiryCycle {
             return null;
         }
 
-        const lastReset = new Date(this.lastReset);
+        const normalizedReference = new Date(referenceDate);
+        normalizedReference.setHours(0, 0, 0, 0);
+
+        let lastReset = new Date(this.lastReset);
         lastReset.setHours(0, 0, 0, 0);
 
-        let nextReset = new Date(lastReset.getTime());
+        let nextReset = this.resetType === 'calendar'
+            ? this._calculateCalendarReset(lastReset)
+            : this._calculateAnniversaryReset(lastReset);
 
-        if (this.resetType === 'calendar') {
-            nextReset = this._calculateCalendarReset(lastReset);
-        } else {
-            nextReset = this._calculateAnniversaryReset(lastReset);
-        }
-
-        // Loop to ensure next reset is in the future relative to the last reset
-        while (nextReset <= referenceDate && nextReset <= lastReset) {
-            const tempLastReset = new Date(nextReset.getTime());
-            tempLastReset.setDate(tempLastReset.getDate() + 1);
-            const tempCycle = new ExpiryCycle({
-                frequency: this.frequency,
-                resetType: this.resetType,
-                lastReset: tempLastReset.toISOString(),
-                anniversaryDate: this.anniversaryDate
-            });
-            return tempCycle.calculateNextResetDate(referenceDate);
+        while (nextReset && nextReset < normalizedReference) {
+            if (nextReset.getTime() === lastReset.getTime()) {
+                break;
+            }
+            lastReset = nextReset;
+            nextReset = this.resetType === 'calendar'
+                ? this._calculateCalendarReset(lastReset)
+                : this._calculateAnniversaryReset(lastReset);
         }
 
         return nextReset;
