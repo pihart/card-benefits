@@ -73,6 +73,7 @@ class ExpiryCycle {
             return null;
         }
 
+        // Cap iteration to avoid infinite loops with malformed data (~27 years of daily steps)
         const SAFETY_LIMIT = 10000;
         let lastReset = new Date(this.lastReset);
         lastReset.setHours(0, 0, 0, 0);
@@ -94,6 +95,7 @@ class ExpiryCycle {
         }
 
         if (safety >= SAFETY_LIMIT && nextReset <= referenceDate && nextReset <= lastReset) {
+            // As a last resort, advance a day beyond the reference date to guarantee forward progress
             const fallback = new Date(referenceDate);
             fallback.setDate(fallback.getDate() + 1);
             return fallback;
