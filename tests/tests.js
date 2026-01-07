@@ -287,6 +287,31 @@ runner.suite('Expiry Types - Anniversary Reset', ({ test }) => {
     });
 });
 
+// Test Suite: Minimum Spend Anniversary Resets
+runner.suite('Minimum Spend Anniversary Resets', ({ test }) => {
+    test('Yearly anniversary minimum spend computes next reset correctly', () => {
+        const anniversaryDate = new Date('2020-03-15');
+        const minSpend = new MinimumSpend({
+            description: 'Annual anniversary spend',
+            targetAmount: 1000,
+            currentAmount: 200,
+            frequency: 'yearly',
+            resetType: 'anniversary',
+            lastReset: '2024-03-15',
+            isMet: false
+        }, anniversaryDate);
+
+        const beforeReset = new Date('2024-12-01');
+        assertFalse(minSpend.shouldReset(beforeReset), 'Should not reset before next anniversary');
+
+        const onReset = new Date('2025-03-15');
+        assertTrue(minSpend.shouldReset(onReset), 'Should reset on anniversary date');
+
+        const deadline = minSpend.getDeadline(beforeReset);
+        assertDateEquals(deadline, new Date('2025-03-14'), 'Deadline should be the day before next anniversary');
+    });
+});
+
 // Test Suite 3: One-time Benefits
 runner.suite('One-time Benefits', ({ test }) => {
     test('One-time benefit should not reset', () => {

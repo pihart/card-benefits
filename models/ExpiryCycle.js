@@ -73,28 +73,23 @@ class ExpiryCycle {
             return null;
         }
 
-        const lastReset = new Date(this.lastReset);
+        let lastReset = new Date(this.lastReset);
         lastReset.setHours(0, 0, 0, 0);
 
-        let nextReset = new Date(lastReset.getTime());
+        let nextReset = this.resetType === 'calendar'
+            ? this._calculateCalendarReset(lastReset)
+            : this._calculateAnniversaryReset(lastReset);
 
-        if (this.resetType === 'calendar') {
-            nextReset = this._calculateCalendarReset(lastReset);
-        } else {
-            nextReset = this._calculateAnniversaryReset(lastReset);
-        }
-
-        // Loop to ensure next reset is in the future relative to the last reset
-        while (nextReset <= referenceDate && nextReset <= lastReset) {
+        // Advance safely if the computed reset isn't ahead of the last reset
+        let safety = 0;
+        while (nextReset <= referenceDate && nextReset <= lastReset && safety < 10000) {
             const tempLastReset = new Date(nextReset.getTime());
             tempLastReset.setDate(tempLastReset.getDate() + 1);
-            const tempCycle = new ExpiryCycle({
-                frequency: this.frequency,
-                resetType: this.resetType,
-                lastReset: tempLastReset.toISOString(),
-                anniversaryDate: this.anniversaryDate
-            });
-            return tempCycle.calculateNextResetDate(referenceDate);
+            lastReset = tempLastReset;
+            nextReset = this.resetType === 'calendar'
+                ? this._calculateCalendarReset(lastReset)
+                : this._calculateAnniversaryReset(lastReset);
+            safety++;
         }
 
         return nextReset;
@@ -125,6 +120,7 @@ class ExpiryCycle {
                     nextReset.setFullYear(nextReset.getFullYear() + 1);
                 }
                 break;
+            case 'yearly':
             case 'annual':
                 nextReset.setDate(1);
                 nextReset.setMonth(0);
@@ -168,6 +164,7 @@ class ExpiryCycle {
                     nextReset.setMonth(nextReset.getMonth() + 6);
                 }
                 break;
+            case 'yearly':
             case 'annual':
                 nextReset = new Date(lastReset.getFullYear(), this.anniversaryDate.getMonth(), this.anniversaryDate.getDate());
                 if (nextReset <= lastReset) {
