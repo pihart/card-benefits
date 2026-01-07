@@ -84,7 +84,9 @@ class ExpiryCycle {
 
         // Advance safely if the computed reset isn't ahead of the last reset (e.g., missing anniversary data)
         let safety = 0;
-        while (nextReset <= referenceDate && nextReset <= lastReset && safety < SAFETY_LIMIT) {
+        while (nextReset <= referenceDate && safety < SAFETY_LIMIT) {
+            if (nextReset > lastReset) break;
+
             const tempLastReset = new Date(nextReset.getTime());
             tempLastReset.setDate(tempLastReset.getDate() + 1);
             lastReset = tempLastReset;
@@ -94,8 +96,13 @@ class ExpiryCycle {
             safety++;
         }
 
-        if (safety >= SAFETY_LIMIT && nextReset <= referenceDate && nextReset <= lastReset) {
-            console.warn('ExpiryCycle: safety limit reached while calculating next reset; using fallback date.');
+        if (safety >= SAFETY_LIMIT && nextReset <= referenceDate) {
+            console.warn('ExpiryCycle: safety limit reached while calculating next reset; using fallback date.', {
+                frequency: this.frequency,
+                resetType: this.resetType,
+                lastReset: this.lastReset,
+                referenceDate: referenceDate.toISOString()
+            });
             // As a last resort, advance a day beyond the reference date to guarantee forward progress
             const fallback = new Date(referenceDate);
             fallback.setDate(fallback.getDate() + 1);
