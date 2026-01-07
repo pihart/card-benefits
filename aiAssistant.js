@@ -139,7 +139,22 @@ class AIAssistant {
         this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
     }
 
-    detectIntent(text) {
+    async detectIntent(text) {
+        if (this.modelReady && this.session && this.session.prompt) {
+            try {
+                const intentPrompt = [
+                    'Classify the user request as either "modification" or "question".',
+                    'Return only one word: modification or question.',
+                    `User text: ${text}`
+                ].join('\n');
+                const aiIntent = await this.session.prompt(intentPrompt);
+                const normalized = (aiIntent || '').toString().trim().toLowerCase();
+                if (normalized.startsWith('modification')) return 'modification';
+                if (normalized.startsWith('question')) return 'question';
+            } catch (e) {
+                console.log('[AI][intent] fallback to heuristic', e);
+            }
+        }
         const lowered = text.toLowerCase();
         const modifiers = ['mark', 'set', 'update', 'change', 'ignore', 'reset', 'remove', 'add'];
         const pattern = new RegExp(`\\b(${modifiers.join('|')})\\b`, 'i');
@@ -316,7 +331,7 @@ class AIAssistant {
         this.appendMessage('user', userText);
         this.inputEl.value = '';
 
-        const intent = this.detectIntent(userText);
+        const intent = await this.detectIntent(userText);
         if (this.intentEl) this.intentEl.textContent = `Intent: ${intent}`;
 
         let reply;
