@@ -16,7 +16,7 @@ class ExpiryCycle {
         this.resetType = resetType;
         this.lastReset = lastReset ? new Date(lastReset) : null;
         this.anniversaryDate = anniversaryDate ? new Date(anniversaryDate) : null;
-        
+
         if (this.lastReset) {
             this.lastReset.setHours(0, 0, 0, 0);
         }
@@ -69,32 +69,18 @@ class ExpiryCycle {
      * @returns {Date} The next reset date
      */
     calculateNextResetDate(referenceDate) {
-        if (!this.lastReset || !this.isRecurring()) {
-            return null;
-        }
+        if (!this.lastReset || !this.isRecurring()) return null;
 
-        const lastReset = new Date(this.lastReset);
-        lastReset.setHours(0, 0, 0, 0);
+        const baseReset = this.resetType === 'calendar'
+            ? this._calculateCalendarReset(this.lastReset)
+            : this._calculateAnniversaryReset(this.lastReset);
 
-        let nextReset = new Date(lastReset.getTime());
+        let nextReset = new Date(baseReset);
 
-        if (this.resetType === 'calendar') {
-            nextReset = this._calculateCalendarReset(lastReset);
-        } else {
-            nextReset = this._calculateAnniversaryReset(lastReset);
-        }
-
-        // Loop to ensure next reset is in the future relative to the last reset
-        while (nextReset <= referenceDate && nextReset <= lastReset) {
-            const tempLastReset = new Date(nextReset.getTime());
-            tempLastReset.setDate(tempLastReset.getDate() + 1);
-            const tempCycle = new ExpiryCycle({
-                frequency: this.frequency,
-                resetType: this.resetType,
-                lastReset: tempLastReset.toISOString(),
-                anniversaryDate: this.anniversaryDate
-            });
-            return tempCycle.calculateNextResetDate(referenceDate);
+        while (nextReset <= referenceDate) {
+            nextReset = this.resetType === 'calendar'
+                ? this._calculateCalendarReset(nextReset)
+                : this._calculateAnniversaryReset(nextReset);
         }
 
         return nextReset;
@@ -221,15 +207,15 @@ class ExpiryCycle {
         if (this.isOneTime()) {
             return deadline;
         }
-        
+
         if (!this.isRecurring()) {
             return null;
         }
-        
+
         // For recurring, deadline is the day before next reset
         const nextReset = this.calculateNextResetDate(currentDate);
         if (!nextReset) return null;
-        
+
         const periodEnd = new Date(nextReset);
         periodEnd.setDate(periodEnd.getDate() - 1);
         return periodEnd;
@@ -244,7 +230,7 @@ class ExpiryCycle {
     daysUntilDeadline(currentDate, deadline = null) {
         const dl = this.getDeadline(currentDate, deadline);
         if (!dl) return null;
-        
+
         const today = new Date(currentDate);
         today.setHours(0, 0, 0, 0);
         const diffTime = dl.getTime() - today.getTime();
@@ -272,7 +258,7 @@ class ExpiryCycle {
     isDeadlinePassed(currentDate, deadline = null) {
         const dl = this.getDeadline(currentDate, deadline);
         if (!dl) return false;
-        
+
         const today = new Date(currentDate);
         today.setHours(0, 0, 0, 0);
         return today > dl;
