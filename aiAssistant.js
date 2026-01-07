@@ -279,38 +279,72 @@ class AIAssistant {
 
     async handleModification(userText) {
         console.log('[AI][request][modification]', { text: userText });
-        const before = this.cloneCards();
-        const matches = this.performHeuristicUpdates(userText);
-        if (matches.length === 0) {
-            return 'I could not find a matching benefit to modify. Please mention the card or benefit name.';
+        await this.ensureSession();
+        if (!this.session) {
+            return 'AI is unavailable to process the modification.';
         }
 
-        const modifiedCardIds = new Set(matches.map((m) => m.cardId));
-        const cardsToValidate = this.app.cards.filter((c) => modifiedCardIds.has(c.id));
-        if (cardsToValidate.length === 0) {
-            this.app.cards.length = 0;
-            before.forEach((c) => this.app.cards.push(c));
-            this.render();
-            return 'No matching cards found to update.';
+        const schemaText = this.schema ? JSON.stringify(this.schema) : '';
+        const currentData = this.app.cards.map((c) => c.toJSON());
+        const modifyPrompt = [
+            'You are an assistant that edits credit card benefit data.',
+            'Use the following JSON schema to shape the output:',
+            schemaText,
+            'Current data (JSON):',
+            JSON.stringify(currentData),
+            'User request:',
+            userText,
+            'Return ONLY the full updated data as JSON matching the schema. Do not include any extra text.'
+        ].join('\n');
+
+        const aiResult = await this.promptModel(modifyPrompt);
+        let proposedData = null;
+        try {
+            proposedData = JSON.parse(aiResult);
+        } catch (e) {
+            // Attempt to extract JSON block if wrapped
+            const match = aiResult && aiResult.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+            if (match) {
+                try {
+                    proposedData = JSON.parse(match[0]);
+                } catch (_) {
+                    proposedData = null;
+                }
+            }
         }
 
-        const validation = validateDataAgainstSchema(cardsToValidate.map((c) => c.toJSON()));
+        if (!proposedData) {
+            return 'AI did not return valid JSON. Please rephrase your request.';
+        }
+
+        const validation = validateDataAgainstSchema(proposedData);
         if (!validation.valid) {
-            this.app.cards.length = 0;
-            before.forEach((c) => this.app.cards.push(c));
-            this.render();
-            return `Schema validation failed: ${validation.errors.join('; ')}`;
+            return `AI returned invalid data: ${validation.errors.join('; ')}`;
         }
 
+        // Apply data
+        this.app.cards = proposedData.map((c) => Card.fromJSON(c));
         await this.app.saveState();
         this.app.render();
         this.refreshSummary();
 
-        const reference = matches.map((m) => `${m.benefit} (${m.card}) - ${m.action}`).join('; ');
-        const modelResponse = await this.promptModel(
-            `We applied these updates: ${reference}. Confirm changes in plain language and restate the updated data as JSON that matches the schema when possible.`
-        );
-        return modelResponse || `Updated ${matches.length} item(s): ${reference}`;
+        // Verification step
+        let verification = '';
+        try {
+            const verifyPrompt = [
+                'Verify whether the updated data satisfies the user request.',
+                'Respond with "yes" or "no" followed by a short reason.',
+                'User request:',
+                userText,
+                'Updated data:',
+                JSON.stringify(proposedData)
+            ].join('\n');
+            verification = await this.promptModel(verifyPrompt);
+        } catch (e) {
+            console.log('[AI][verify] failed', e);
+        }
+
+        return verification || 'Applied AI changes.';
     }
 
     async answerQuestion(userText) {
