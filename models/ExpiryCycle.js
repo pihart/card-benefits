@@ -77,7 +77,7 @@ class ExpiryCycle {
 
         let nextReset = new Date(baseReset);
 
-        while (nextReset <= referenceDate) {
+        while (nextReset < referenceDate) {
             nextReset = this.resetType === 'calendar'
                 ? this._calculateCalendarReset(nextReset)
                 : this._calculateAnniversaryReset(nextReset);
