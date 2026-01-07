@@ -96,6 +96,7 @@ class AIAssistant {
             this.session = await LanguageModel.create({
                 systemPrompt: this.baseSystemPrompt()
             });
+            console.log('[AI][download] model ready');
             this.modelReady = true;
             this.enableChat();
             this.setProgress(100);
@@ -105,6 +106,7 @@ class AIAssistant {
         } catch (err) {
             this.session = null;
             this.modelReady = false;
+            console.log('[AI][download] failed', err);
             this.setStatus(`AI unavailable: ${err.message}`);
             this.disableChat();
         } finally {
@@ -118,10 +120,12 @@ class AIAssistant {
             this.session = await LanguageModel.create({
                 systemPrompt: this.baseSystemPrompt()
             });
+            console.log('[AI][session] created');
             this.modelReady = true;
             return this.session;
         } catch (err) {
             this.setStatus(`AI init failed: ${err.message}`);
+            console.log('[AI][session] create failed', err);
             return null;
         }
     }
@@ -215,7 +219,9 @@ class AIAssistant {
         await this.ensureSession();
         if (!this.session || !this.session.prompt) return null;
         try {
-            return await this.session.prompt(prompt);
+            const result = await this.session.prompt(prompt);
+            console.log('[AI][prompt]', { promptSnippet: prompt.slice(0, 200), responseSnippet: typeof result === 'string' ? result.slice(0, 200) : result });
+            return result;
         } catch (err) {
             this.setStatus(`AI prompt failed: ${err.message}`);
             return null;
@@ -257,6 +263,7 @@ class AIAssistant {
     }
 
     async handleModification(userText) {
+        console.log('[AI][request][modification]', { text: userText });
         const before = this.cloneCards();
         const matches = this.performHeuristicUpdates(userText);
         if (matches.length === 0) {
@@ -292,6 +299,7 @@ class AIAssistant {
     }
 
     async answerQuestion(userText) {
+        console.log('[AI][request][question]', { text: userText });
         const context = JSON.stringify(this.buildContextSnapshot());
         const modelResponse = await this.promptModel(
             `Answer the user's question about card benefits. Include card/benefit names as references.\nData: ${context}\nQuestion: ${userText}`
